@@ -4,7 +4,8 @@
       "Bash(where py *)",
       "Bash(where python3.exe)",
       "Read(//c/Users/alfie/AppData/Local/Programs/Python//**)",
-      "Bash(ls /c/Python*)"
+      "Bash(ls /c/Python*)",
+      "Bash(py -c ' *)"
     ]
   }
 }

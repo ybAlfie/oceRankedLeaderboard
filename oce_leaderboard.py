@@ -2,31 +2,30 @@
 """
 OCE Slapshot: Rebound Leaderboard Builder
 
-Reads a spreadsheet of player names + Slapshot IDs, fetches each player's
-current rank from slapshot.gg's public JSON endpoints, and optionally
-crawls match history to discover OCE players missing from the list.
+Maintains a list of known player IDs in players.json, fetches ranked data for
+each, discovers new OCE players via BFS through match histories, and outputs
+a sorted leaderboard.
 
 Usage:
-    python oce_leaderboard.py [xlsx_path] [output_dir]
-    python oce_leaderboard.py --no-discover            # Phase 1 only (known IDs)
-    python oce_leaderboard.py --max-discovery 100      # Cap BFS growth
+    python oce_leaderboard.py                    # full run
+    python oce_leaderboard.py --no-discover      # skip BFS, just refresh known IDs
+    python oce_leaderboard.py --resume           # skip already-cached IDs
+    python oce_leaderboard.py --max-discovery 50 # cap BFS growth
 
 Outputs (in output_dir/):
-    - oce_leaderboard.csv        Sorted leaderboard of all matched players
-    - discovered_not_on_list.csv OCE players found in match history not in your spreadsheet
-    - unmatched_names.csv        Names in your spreadsheet we couldn't find an ID for
-    - raw_data.json              Full API responses (useful for debugging / later enrichment)
+    - leaderboard.html       interactive leaderboard, open in browser
+    - full_leaderboard.csv   raw CSV of all players sorted by rating
+    - players.json           persisted list of all known player IDs
+    - raw_data.json          full API response cache
 """
 
 import argparse
 import csv
 import json
-import sys
 import time
 from collections import deque
 from pathlib import Path
 
-import openpyxl
 import requests
 
 
@@ -37,12 +36,11 @@ OCE_REGION = "oce-east"
 DELAY_SECONDS = 1           # Pause between requests; RateTracker handles the ~10/30s cap
 DEFAULT_MAX_DISCOVERY = 500 # Cap on new players to discover via BFS
 
-SEASON3_START = "2025-09-23"          # Only count matches from this date onward
-CASUAL_MATCH_TYPE = "casual"          # Ranked game mode; excludes pond, customs
-MIN_OCE_SEASON3_MATCHES = 2          # Min qualifying matches to appear in not_on_list
+SEASON3_START = "2025-09-23"  # Only follow matches from this date onward
+CASUAL_MATCH_TYPE = "casual"  # Ranked game mode; excludes pond, customs
+MIN_OCE_SEASON3_MATCHES = 2   # Min OCE Season 3 matches to keep a discovered player
 
 HEADERS = {
-    # Present as a normal browser; referer matches what Firefox actually sends
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -115,25 +113,9 @@ def get_ranked(pid, rate, session):
     return fetch_json(f"{BASE_URL}/api/game/players/{pid}/ranked", rate, session)
 
 
-# ---- Input / helpers ----
-
-def load_players(xlsx_path):
-    wb = openpyxl.load_workbook(xlsx_path)
-    ws = wb.active
-    players = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        if not row or not row[0]:
-            continue
-        name = str(row[0]).strip()
-        pid = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
-        if pid == "None":
-            pid = None
-        players.append({"name": name, "id": pid})
-    return players
-
+# ---- Helpers ----
 
 def extract_match_player_ids(match):
-    """Pull all player IDs out of a match entry. Defensive about field names."""
     ids = set()
     game_stats = (match or {}).get("game_stats") or {}
     for p in game_stats.get("players", []) or []:
@@ -149,7 +131,7 @@ def extract_match_player_ids(match):
 
 
 def is_qualifying_match(match):
-    """Return True if a match counts as an OCE casual Season 3 game."""
+    """True if match is OCE casual ranked from Season 3 onward."""
     return (
         match.get("region") == OCE_REGION
         and match.get("match_type") == CASUAL_MATCH_TYPE
@@ -157,11 +139,22 @@ def is_qualifying_match(match):
     )
 
 
-def count_qualifying_matches(player_data):
+def count_oce_season3_matches(player_data):
     """Count OCE Season 3 matches (any mode) to gauge if a player is OCE-based."""
-    return sum(1 for m in (player_data or {}).get("match_history", []) or []
-               if m.get("region") == OCE_REGION
-               and (m.get("created") or "") >= SEASON3_START)
+    return sum(
+        1 for m in (player_data or {}).get("match_history", []) or []
+        if m.get("region") == OCE_REGION
+        and (m.get("created") or "") >= SEASON3_START
+    )
+
+
+def fetch_player(pid, rate, session, cache):
+    if pid in cache:
+        return cache[pid]
+    player = get_player(pid, rate, session)
+    ranked = get_ranked(pid, rate, session)
+    cache[pid] = {"player": player, "ranked": ranked}
+    return cache[pid]
 
 
 # ---- HTML output ----
@@ -339,51 +332,63 @@ render();
 
 # ---- Main pipeline ----
 
-def fetch_all_for_id(pid, rate, session, cache):
-    if pid in cache:
-        return cache[pid]
-    player = get_player(pid, rate, session)
-    ranked = get_ranked(pid, rate, session)
-    cache[pid] = {"player": player, "ranked": ranked}
-    return cache[pid]
+def load_known_ids(players_path, raw_path):
+    """Load IDs from players.json, seeding from raw_data.json if it doesn't exist yet."""
+    p = Path(players_path)
+    if p.exists():
+        ids = json.loads(p.read_text(encoding="utf-8"))
+        print(f"Loaded {len(ids)} known IDs from {players_path}")
+        return list(dict.fromkeys(str(i) for i in ids))  # dedup, preserve order
+
+    r = Path(raw_path)
+    if r.exists():
+        ids = list(json.loads(r.read_text(encoding="utf-8")).keys())
+        print(f"players.json not found — seeded {len(ids)} IDs from {raw_path}")
+        return ids
+
+    print("No players.json or raw_data.json found — starting fresh")
+    return []
 
 
-def run(xlsx_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY, resume=False):
-    players = load_players(xlsx_path)
-    known_ids = [p["id"] for p in players if p["id"]]
-    print(f"Loaded {len(players)} players; {len(known_ids)} have IDs, "
-          f"{len(players) - len(known_ids)} don't\n")
+def save_known_ids(players_path, ids):
+    Path(players_path).write_text(
+        json.dumps(sorted(ids, key=int), indent=2), encoding="utf-8"
+    )
+
+
+def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY, resume=False):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_path = output_dir / "raw_data.json"
+    known_ids = load_known_ids(players_path, raw_path)
 
     rate = RateTracker()
     session = requests.Session()
 
-    # Load previous run's cache if resuming
     cache = {}
-    raw_path = Path(output_dir) / "raw_data.json"
     if resume and raw_path.exists():
         with open(raw_path) as f:
             cache = json.load(f)
         print(f"Resumed cache: {len(cache)} IDs already fetched\n")
 
-    # ---- Phase 1: known IDs ----
-    print("=== Phase 1: fetching known IDs ===")
+    # ---- Phase 1: fetch all known IDs ----
+    print(f"\n=== Phase 1: fetching {len(known_ids)} known IDs ===")
     for i, pid in enumerate(known_ids, 1):
         if pid in cache:
             print(f"[{i}/{len(known_ids)}] id={pid} (cached)")
             continue
         print(f"[{i}/{len(known_ids)}] id={pid}")
-        fetch_all_for_id(pid, rate, session, cache)
+        fetch_player(pid, rate, session, cache)
 
-    # ---- Phase 2: BFS discovery through match history ----
-    discovered = set()
+    # ---- Phase 2: BFS discovery ----
+    new_ids = []
     if discover:
         print(f"\n=== Phase 2: BFS discovery (cap: {max_discovery}) ===")
-        # When resuming, treat everything already in cache as visited/queued
-        # so BFS explores from the frontier of the previous run
-        visited = set(cache.keys()) if resume else set(known_ids)
-        queue = deque(cache.keys()) if resume else deque(known_ids)
+        visited = set(cache.keys())
+        queue = deque(known_ids)
 
-        while queue and len(discovered) < max_discovery:
+        while queue and len(new_ids) < max_discovery:
             pid = queue.popleft()
             player_data = cache.get(pid, {}).get("player")
             if not player_data:
@@ -396,146 +401,40 @@ def run(xlsx_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVER
                     if new_id in visited or new_id.startswith("bot-"):
                         continue
                     visited.add(new_id)
-                    discovered.add(new_id)
-                    print(f"[discover {len(discovered)}] id={new_id}")
-                    fetch_all_for_id(new_id, rate, session, cache)
+                    data = fetch_player(new_id, rate, session, cache)
+                    pd = (data.get("player") or {})
+                    if count_oce_season3_matches(pd) < MIN_OCE_SEASON3_MATCHES:
+                        continue
+                    new_ids.append(new_id)
+                    print(f"[discover {len(new_ids)}] id={new_id} ({pd.get('username', '?')})")
                     queue.append(new_id)
-                    if len(discovered) >= max_discovery:
+                    if len(new_ids) >= max_discovery:
                         break
-                if len(discovered) >= max_discovery:
+                if len(new_ids) >= max_discovery:
                     break
 
-    # ---- Auto-match discovered usernames to unknown names in the list ----
-    print("\n=== Matching discovered usernames to unknown names ===")
-    username_to_id = {}
-    for pid, data in cache.items():
-        pd = data.get("player") or {}
-        uname = (pd.get("username") or "").strip().upper()
-        if uname:
-            # If multiple IDs share a name (rare), keep the one with most matches_played
-            existing = username_to_id.get(uname)
-            if existing is None:
-                username_to_id[uname] = pid
-            else:
-                new_mp = ((data.get("ranked") or {}).get("matches_played") or 0)
-                old_mp = ((cache[existing].get("ranked") or {}).get("matches_played") or 0)
-                if new_mp > old_mp:
-                    username_to_id[uname] = pid
+    # ---- Save updated ID list ----
+    all_ids = list(dict.fromkeys(known_ids + new_ids))
+    save_known_ids(players_path, all_ids)
 
-    matched = 0
-    for p in players:
-        if not p["id"]:
-            up = p["name"].upper()
-            if up in username_to_id:
-                p["id"] = username_to_id[up]
-                matched += 1
-                print(f"   + {p['name']} -> {p['id']}")
-    print(f"Auto-matched {matched} of "
-          f"{sum(1 for p in players if not p['id']) + matched} previously-unknown names")
-
-    # Write matched IDs back into the xlsx so future runs treat them as known
-    if matched > 0:
-        wb = openpyxl.load_workbook(xlsx_path)
-        ws = wb.active
-        name_to_id = {p["name"]: p["id"] for p in players if p["id"]}
-        for row in ws.iter_rows(min_row=2):
-            if not row[0].value:
-                continue
-            name = str(row[0].value).strip()
-            if name in name_to_id and (not row[1].value):
-                row[1].value = name_to_id[name]
-        wb.save(xlsx_path)
-        print(f"Saved {matched} matched IDs back to {xlsx_path}")
-
-    # ---- Build outputs ----
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
+    # ---- Build leaderboard ----
     leaderboard = []
-    for p in players:
-        if not p["id"] or p["id"] not in cache:
-            continue
-        r = cache[p["id"]].get("ranked") or {}
-        pd = cache[p["id"]].get("player") or {}
-        leaderboard.append({
-            "name": p["name"],
-            "username": pd.get("username", ""),
-            "id": p["id"],
-            "rating": r.get("rating"),
-            "rank": (r.get("rank") or {}).get("name", ""),
-            "rank_key": (r.get("rank") or {}).get("key", ""),
-            "highest_rating": r.get("highest_rating"),
-            "highest_rank": (r.get("highest_rank") or {}).get("name", ""),
-            "matches_played": r.get("matches_played"),
-            "season": r.get("season", ""),
-        })
-    # Sort: ranked players first (by rating desc), then unranked
-    leaderboard.sort(key=lambda x: (x["rating"] is None, -(x["rating"] or 0)))
-
-    with open(output_dir / "oce_leaderboard.csv", "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=[
-            "position", "name", "username", "rank", "rating",
-            "highest_rank", "highest_rating", "matches_played", "season", "id",
-        ])
-        w.writeheader()
-        for i, p in enumerate(leaderboard, 1):
-            w.writerow({"position": i, **{k: v for k, v in p.items() if k != "rank_key"}})
-
-    # Discovered players NOT on the spreadsheet (candidates to add)
-    names_on_list = {p["name"].upper() for p in players}
-    not_on_list = []
     for pid, data in cache.items():
         pd = data.get("player") or {}
-        uname = (pd.get("username") or "").strip()
-        if not uname or uname.upper() in names_on_list:
-            continue
-        if count_qualifying_matches(pd) < MIN_OCE_SEASON3_MATCHES:
-            continue
         r = data.get("ranked") or {}
-        not_on_list.append({
-            "username": uname,
-            "id": pid,
-            "rating": r.get("rating"),
-            "rank": (r.get("rank") or {}).get("name", ""),
-            "matches_played": r.get("matches_played"),
-        })
-    not_on_list.sort(key=lambda x: (x["rating"] is None, -(x["rating"] or 0)))
-
-    with open(output_dir / "discovered_not_on_list.csv", "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=[
-            "username", "id", "rank", "rating", "matches_played"
-        ])
-        w.writeheader()
-        w.writerows(not_on_list)
-
-    # ---- Full combined leaderboard (spreadsheet players + discovered) ----
-    seen_ids = set()
-    full_leaderboard = []
-    for p in leaderboard:
-        seen_ids.add(p["id"])
-        full_leaderboard.append({
-            "name": p["name"],
-            "id": p["id"],
-            "rank": p["rank"],
-            "rating": p["rating"],
-            "matches_played": p["matches_played"],
-            "highest_rank": p["highest_rank"],
-            "highest_rating": p["highest_rating"],
-        })
-    for p in not_on_list:
-        if p["id"] in seen_ids:
+        uname = (pd.get("username") or "").strip()
+        if not uname:
             continue
-        r = cache.get(p["id"], {}).get("ranked") or {}
-        full_leaderboard.append({
-            "name": p["username"],
-            "id": p["id"],
-            "rank": p["rank"],
-            "rating": p["rating"],
-            "matches_played": p["matches_played"],
+        leaderboard.append({
+            "name": uname,
+            "id": pid,
+            "rank": (r.get("rank") or {}).get("name", ""),
+            "rating": r.get("rating"),
+            "matches_played": r.get("matches_played"),
             "highest_rank": (r.get("highest_rank") or {}).get("name", ""),
             "highest_rating": r.get("highest_rating"),
         })
-    full_leaderboard.sort(key=lambda x: (x["rating"] is None, -(x["rating"] or 0)))
+    leaderboard.sort(key=lambda x: (x["rating"] is None, -(x["rating"] or 0)))
 
     with open(output_dir / "full_leaderboard.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=[
@@ -543,42 +442,31 @@ def run(xlsx_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVER
             "highest_rank", "highest_rating", "id",
         ])
         w.writeheader()
-        for i, p in enumerate(full_leaderboard, 1):
+        for i, p in enumerate(leaderboard, 1):
             w.writerow({"position": i, **p})
 
     with open(output_dir / "leaderboard.html", "w", encoding="utf-8") as f:
-        f.write(build_html(full_leaderboard))
+        f.write(build_html(leaderboard))
 
-    # Names in the spreadsheet we still couldn't match
-    unmatched = [p["name"] for p in players if not p["id"]]
-    with open(output_dir / "unmatched_names.csv", "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["name"])
-        for n in unmatched:
-            w.writerow([n])
-
-    # Raw data saved first so a later CSV crash doesn't lose the cache
-    with open(output_dir / "raw_data.json", "w") as f:
+    with open(raw_path, "w") as f:
         json.dump(cache, f, indent=2)
 
     print(f"\nDone! Written to {output_dir}/")
-    print(f"  leaderboard.html            open in browser")
-    print(f"  full_leaderboard.csv        {len(full_leaderboard)} total OCE players")
-    print(f"  oce_leaderboard.csv         {len(leaderboard)} spreadsheet players")
-    print(f"  discovered_not_on_list.csv  {len(not_on_list)} OCE players not on your list")
-    print(f"  unmatched_names.csv         {len(unmatched)} names still missing an ID")
+    print(f"  leaderboard.html       open in browser")
+    print(f"  full_leaderboard.csv   {len(leaderboard)} players")
+    print(f"  players.json           {len(all_ids)} known IDs ({len(new_ids)} new this run)")
 
 
 # ---- CLI ----
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("xlsx", nargs="?", default="Leaderboard_Names_and_IDs.xlsx",
-                        help="Path to the name/ID spreadsheet")
-    parser.add_argument("output", nargs="?", default="output",
-                        help="Directory to write CSVs and raw data to")
+    parser.add_argument("--players", default="players.json",
+                        help="Path to the player ID list (default: players.json)")
+    parser.add_argument("--output", default="output",
+                        help="Directory to write outputs to (default: output)")
     parser.add_argument("--no-discover", action="store_true",
-                        help="Skip Phase 2 (BFS discovery)")
+                        help="Skip Phase 2 BFS discovery")
     parser.add_argument("--max-discovery", type=int, default=DEFAULT_MAX_DISCOVERY,
                         help=f"Cap on discovered players (default: {DEFAULT_MAX_DISCOVERY})")
     parser.add_argument("--delay", type=float, default=DELAY_SECONDS,
@@ -588,7 +476,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     DELAY_SECONDS = args.delay
-    run(args.xlsx, args.output,
+    run(args.players, args.output,
         discover=not args.no_discover,
         max_discovery=args.max_discovery,
         resume=args.resume)
