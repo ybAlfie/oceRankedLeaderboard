@@ -154,6 +154,8 @@ def calc_recent_stats(pid, player_data):
     """Win rate and goals/game from the last 10 OCE casual matches in history."""
     wins = goals = games = 0
     for m in (player_data or {}).get("match_history", []) or []:
+        if games >= 10:
+            break
         if not is_qualifying_match(m):
             continue
         stats = next(
@@ -742,11 +744,9 @@ const RANK_THRESHOLD = {{
   'Gold III':1660,'Gold II':1580,'Gold I':1500,
   'Silver III':1440,'Silver II':1380,'Silver I':1320,
   'Bronze III':1260,'Bronze II':1200,'Bronze I':1140,
-  'Unranked':0,
 }};
 const PODIUM = ['top-1','top-2','top-3'];
 
-const rankVal = r => {{ const i = RANK_ORDER.indexOf(r); return i === -1 ? 99 : i; }};
 const rankCellHtml = r => {{
   const img = RANK_IMG[r] ? `<img src="${{RANK_IMG[r]}}" alt="${{r}}">` : '';
   const color = RANK_COLOR[r] || '#7a8da6';
