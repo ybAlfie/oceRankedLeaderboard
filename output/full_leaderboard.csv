@@ -1,51 +1,51 @@
 ﻿position,name,rank,rating,matches_played,highest_rank,highest_rating,id
-1,Moses,Platinum I,1755,276,Platinum I,1761,78446
-2,forehead,Gold III,1735,44,Platinum I,1757,147030
-3,blegh,Gold III,1725,43,Platinum I,1745,374530
-4,Kobbie Maynoo,Gold III,1714,166,Gold III,1728,104294
-5,jonny James,Gold III,1714,157,Gold III,1730,104293
-6,baccy,Gold III,1696,143,Platinum I,1765,154
-7,yenakis,Gold III,1694,257,Gold III,1737,516
-8,JOEY,Gold III,1693,28,Gold III,1693,1701839
-9,zuza,Gold III,1688,415,Gold III,1726,231086
-10,Trug,Gold III,1687,90,Gold III,1699,648
-11,sillysausage,Gold III,1675,253,Platinum I,1758,866634
+1,forehead,Gold III,1735,56,Platinum I,1762,147030
+2,sillysausage,Gold III,1732,267,Platinum I,1758,866634
+3,blegh,Gold III,1730,48,Platinum I,1746,374530
+4,jonny James,Gold III,1714,157,Gold III,1730,104293
+5,Kobbie Maynoo,Gold III,1714,166,Gold III,1728,104294
+6,Moses,Gold III,1710,289,Platinum I,1764,78446
+7,Dumb,Gold III,1698,234,Gold III,1698,918088
+8,baccy,Gold III,1696,143,Platinum I,1765,154
+9,JOEY,Gold III,1693,28,Gold III,1693,1701839
+10,zuza,Gold III,1688,415,Gold III,1726,231086
+11,Trug,Gold III,1687,92,Gold III,1699,648
 12,end5d,Gold III,1670,35,Gold III,1673,325
-13,DooT,Gold III,1667,93,Gold III,1706,513063
-14,Haelnorr,Gold III,1667,38,Gold III,1679,1322560
+13,Haelnorr,Gold III,1667,38,Gold III,1679,1322560
+14,alfie,Gold III,1664,528,Platinum I,1744,440
 15,MiqeL,Gold III,1662,44,Gold III,1674,625139
 16,Spar,Unranked,1653,9,,,66
-17,JDB,Gold II,1651,244,Gold III,1690,889215
-18,Dumb,Gold II,1648,221,Gold III,1670,918088
+17,JDB,Gold II,1652,248,Gold III,1690,889215
+18,gecko,Gold II,1649,135,Gold III,1695,462563
 19,Leben James,Gold II,1643,356,Platinum I,1792,851143
-20,HippoHugger4000,Gold II,1642,90,Gold III,1662,438631
-21,Senior Jorge,Gold II,1635,85,Gold III,1689,149686
+20,yenakis,Gold II,1641,274,Gold III,1737,516
+21,Dandy,Gold II,1634,189,Gold II,1638,156
 22,arf,Gold II,1634,71,Gold II,1644,1085317
-23,gecko,Gold II,1627,123,Gold III,1695,462563
-24,duc nhan,Gold II,1618,96,Gold II,1628,182
-25,kevin food & drink,Gold II,1616,29,Gold III,1671,374559
-26,zenonix,Gold II,1613,154,Gold II,1622,1243647
-27,willzz,Gold II,1607,58,Gold III,1678,1004826
-28,N1Q,Gold II,1605,11,Gold II,1605,157
-29,Dandy,Gold II,1597,173,Gold II,1610,156
-30,El MoshyO,Unranked,1597,5,,,1022964
-31,alfie,Gold II,1594,503,Platinum I,1744,440
-32,unc,Gold I,1569,12,Gold I,1569,384090
-33,Chebs,Gold I,1568,27,Gold II,1614,598
-34,Corzo,Gold I,1561,14,Gold II,1603,830525
-35,Cooper Flagg Enthusiast,Gold I,1554,18,Gold I,1554,1085421
-36,kaidan,Gold I,1552,153,Gold II,1602,935509
-37,CowArmy33,Gold I,1552,14,Gold II,1592,124044
+23,HippoHugger4000,Gold II,1629,96,Gold III,1662,438631
+24,Senior Jorge,Gold II,1625,86,Gold III,1689,149686
+25,duc nhan,Gold II,1618,96,Gold II,1628,182
+26,kevin food & drink,Gold II,1616,29,Gold III,1671,374559
+27,zenonix,Gold II,1613,154,Gold II,1622,1243647
+28,DooT,Gold II,1608,108,Gold III,1706,513063
+29,willzz,Gold II,1607,58,Gold III,1678,1004826
+30,N1Q,Gold II,1605,11,Gold II,1605,157
+31,El MoshyO,Unranked,1597,5,,,1022964
+32,T3jay76,Gold II,1586,44,Gold II,1630,592423
+33,unc,Gold I,1569,12,Gold I,1569,384090
+34,Chebs,Gold I,1568,27,Gold II,1614,598
+35,Corzo,Gold I,1561,14,Gold II,1603,830525
+36,CowArmy33,Gold I,1552,14,Gold II,1592,124044
+37,kaidan,Gold I,1552,153,Gold II,1602,935509
 38,JoshuaJoshua,Gold I,1548,18,Gold II,1621,429652
-39,jacko,Gold I,1545,17,Gold II,1612,660936
-40,T3jay76,Gold I,1542,29,Gold II,1630,592423
+39,zablaxx,Gold I,1546,32,Gold I,1546,277948
+40,jacko,Gold I,1545,17,Gold II,1612,660936
 41,AmusingDolphin,Gold I,1535,19,Gold II,1580,1006482
 42,Badza,Gold I,1532,34,Gold II,1650,417674
-43,mellow,Gold I,1522,168,Gold II,1584,2054959
+43,Cooper Flagg Enthusiast,Gold I,1524,20,Gold I,1554,1085421
 44,erson 2,Gold I,1522,70,Gold II,1622,1103112
 45,MassiveLegend,Gold I,1515,54,Gold I,1563,91687
-46,xdxavking,Gold I,1501,14,Gold I,1520,2108991
-47,zablaxx,Gold I,1495,28,Gold I,1495,277948
+46,mellow,Gold I,1511,180,Gold II,1584,2054959
+47,xdxavking,Gold I,1501,14,Gold I,1520,2108991
 48,antspants444,Unranked,1484,4,,,2108992
 49,USUGI VAMO,Unranked,1484,4,,,2113611
 50,Wang King,Silver III,1478,12,Silver III,1478,2112339
@@ -55,14 +55,14 @@
 54,Paperman4020,Unranked,1446,6,,,2115464
 55,Kean,Unranked,1440,6,,,1524280
 56,Antarctic,Unranked,1440,3,,,1629618
-57,Ali younes,Silver II,1419,16,Silver III,1444,320077
-58,4,Unranked,1399,4,,,2119413
+57,4,Unranked,1399,4,,,2119413
+58,Ali younes,Silver II,1396,17,Silver III,1444,320077
 59,GEORGE_LEMON01,Unranked,1380,1,,,2117631
-60,dogeman,Unranked,1379,1,,,2118162
-61,Barna Turambar,Unranked,1379,1,,,1154050
+60,Barna Turambar,Unranked,1379,1,,,1154050
+61,dogeman,Unranked,1379,1,,,2118162
 62,SuperRog,Unranked,1378,1,,,1828608
-63,muxer,Unranked,1377,1,,,2118108
-64,jedi,Unranked,1377,1,,,2118104
+63,jedi,Unranked,1377,1,,,2118104
+64,muxer,Unranked,1377,1,,,2118108
 65,martin,Unranked,1376,1,,,620
 66,Kitty Kitty,Unranked,1375,6,,,1107113
 67,samwise,Unranked,1372,1,,,2117024

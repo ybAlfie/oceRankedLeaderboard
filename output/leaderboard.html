@@ -3,177 +3,1195 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OCE Slapshot Leaderboard</title>
+<title>OCE Ranked Leaderboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --navy-deep:  #0a1628;
+    --navy:       #142238;
+    --navy-mid:   #1c3054;
+    --cyan:       #4fc3f7;
+    --gold:       #f5b731;
+    --text:       #e8edf4;
+    --muted:      #7a8da6;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0f1117; color: #e2e8f0; font-family: system-ui, sans-serif; padding: 24px; }
-  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; color: #fff; }
-  .subtitle { color: #64748b; font-size: 0.85rem; margin-bottom: 20px; }
-  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
-  .search { background: #1e2230; border: 1px solid #2d3348; color: #e2e8f0; padding: 7px 12px;
-             border-radius: 6px; font-size: 0.9rem; width: 220px; }
-  .search::placeholder { color: #475569; }
-  .search:focus { outline: none; border-color: #4f8ef7; }
-  .toggle { background: #1e2230; border: 1px solid #2d3348; color: #94a3b8; padding: 7px 14px;
-             border-radius: 6px; font-size: 0.85rem; cursor: pointer; transition: all .15s; }
-  .toggle.active { background: #4f8ef7; border-color: #4f8ef7; color: #fff; }
-  .count { color: #64748b; font-size: 0.85rem; margin-left: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-  thead th { background: #161b27; color: #94a3b8; font-weight: 600; text-align: left;
-              padding: 10px 14px; border-bottom: 1px solid #2d3348; white-space: nowrap;
-              cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
-  thead th:hover { color: #e2e8f0; }
-  thead th.sorted { color: #4f8ef7; }
-  thead th .arrow { margin-left: 4px; font-size: 0.7rem; opacity: 0.6; }
-  thead th.sorted .arrow { opacity: 1; }
-  tbody tr { border-bottom: 1px solid #1a1f2e; transition: background .1s; }
-  tbody tr:hover { background: #1a2035; }
-  td { padding: 9px 14px; }
-  td.pos { color: #475569; width: 48px; }
-  td.name { font-weight: 500; color: #fff; }
-  td.name a { color: inherit; text-decoration: none; }
-  td.name a:hover { color: #4f8ef7; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .rank-badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
-                 font-size: 0.78rem; font-weight: 600; }
-  .rank-Platinum\ I  { background:#2a1f6e; color:#a78bfa; }
-  .rank-Gold\ III    { background:#2d2200; color:#f59e0b; }
-  .rank-Gold\ II     { background:#2d2200; color:#fbbf24; }
-  .rank-Gold\ I      { background:#2d2200; color:#fcd34d; }
-  .rank-Silver\ III  { background:#1e2530; color:#94a3b8; }
-  .rank-Silver\ II   { background:#1e2530; color:#cbd5e1; }
-  .rank-Silver\ I    { background:#1e2530; color:#e2e8f0; }
-  .rank-Bronze\ III  { background:#2a1a0e; color:#d97706; }
-  .rank-Bronze\ II   { background:#2a1a0e; color:#b45309; }
-  .rank-Bronze\ I    { background:#2a1a0e; color:#92400e; }
-  .rank-Unranked      { background:#1a1f2e; color:#475569; }
-  .rank-             { background:#1a1f2e; color:#475569; }
-  .rank-badge { display: inline-flex; align-items: center; gap: 5px; }
-  .rank-badge img { width: 20px; height: 20px; object-fit: contain; }
+  body {
+    background: var(--navy-deep);
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(27,107,158,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(245,183,49,0.06) 0%, transparent 50%);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.5rem;
+    letter-spacing: 0.15em;
+    color: var(--text);
+    line-height: 1;
+  }
+  h1 .accent {
+    color: var(--gold);
+  }
+  .subtitle {
+    font-family: 'Teko', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-top: 6px;
+  }
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  tr {
+    transition: background 0.15s;
+    border-radius: 8px;
+  }
+  tbody tr {
+    background: rgba(28, 48, 84, 0.45);
+    border-bottom: 4px solid var(--navy-deep);
+  }
+  tbody tr:hover { background: rgba(79,195,247,0.07); }
+  td {
+    padding: 14px 16px;
+    vertical-align: middle;
+  }
+  td:first-child { border-radius: 8px 0 0 8px; }
+  td:last-child  { border-radius: 0 8px 8px 0; }
+  td.pos {
+    font-family: 'Teko', sans-serif;
+    font-size: 1.1rem;
+    color: var(--muted);
+    width: 48px;
+    text-align: right;
+    padding-right: 20px;
+  }
+  td.name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    letter-spacing: 0.05em;
+  }
+  td.name a {
+    color: var(--text);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  td.name a:hover { color: var(--cyan); }
+  td.rank-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Teko', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  td.rank-cell img {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  td.rating {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    color: var(--cyan);
+    text-align: right;
+    letter-spacing: 0.04em;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .search {
+    background: #142238;
+    border: 1px solid rgba(79,195,247,0.15);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 8px 14px;
+    width: 240px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search::placeholder { color: var(--muted); }
+  .search:focus { border-color: var(--cyan); }
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Teko', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-label input { display: none; }
+  .checkmark {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(79,195,247,0.3);
+    border-radius: 4px;
+    background: #142238;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+    flex-shrink: 0;
+  }
+  .toggle-label input:checked + .checkmark {
+    background: var(--cyan);
+    border-color: var(--cyan);
+  }
+  .toggle-label input:checked + .checkmark::after {
+    content: '';
+    display: block;
+    width: 5px;
+    height: 9px;
+    border: 2px solid #0a1628;
+    border-top: none;
+    border-left: none;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+  .toggle-label:hover .checkmark { border-color: var(--cyan); }
+  .last-updated {
+    font-family: 'Teko', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  /* Rank dividers */
+  .rank-divider { background: transparent !important; border-bottom: none !important; }
+  .rank-divider:hover { background: transparent !important; }
+  .rank-divider td { padding: 8px 16px 4px; }
+  .rank-divider.empty { opacity: 0.3; }
+  .divider-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .div-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+  }
+  .divider-inner img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+  .divider-rank {
+    font-family: 'Teko', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .divider-threshold {
+    font-family: 'Teko', sans-serif;
+    font-size: 0.82rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  /* Podium rows */
+  .top-1 {
+    background: linear-gradient(90deg, rgba(197,155,42,0.22) 0%, rgba(197,155,42,0.10) 60%, rgba(28,48,84,0.45) 100%) !important;
+    border-left: 3px solid #f5b731;
+  }
+  .top-1 td.pos { color: #f5b731; font-size: 1.3rem; }
+  .top-1 td.name a { color: #f5d442; }
+
+  .top-2 {
+    background: linear-gradient(90deg, rgba(168,189,208,0.18) 0%, rgba(168,189,208,0.08) 60%, rgba(28,48,84,0.45) 100%) !important;
+    border-left: 3px solid #a8bdd0;
+  }
+  .top-2 td.pos { color: #a8bdd0; font-size: 1.3rem; }
+  .top-2 td.name a { color: #c8dae8; }
+
+  .top-3 {
+    background: linear-gradient(90deg, rgba(205,127,50,0.18) 0%, rgba(205,127,50,0.08) 60%, rgba(28,48,84,0.45) 100%) !important;
+    border-left: 3px solid #cd7f32;
+  }
+  .top-3 td.pos { color: #cd7f32; font-size: 1.3rem; }
+  .top-3 td.name a { color: #e0974a; }
 </style>
 </head>
 <body>
-<h1>OCE Slapshot Leaderboard</h1>
-<p class="subtitle">Season 3 &mdash; oce-east</p>
-<div class="controls">
-  <input class="search" type="text" placeholder="Search name..." id="search">
-  <button class="toggle" id="toggleZero">Hide 0 matches</button>
-  <button class="toggle" id="toggleUnranked">Hide unranked</button>
-  <span class="count" id="count"></span>
+<div class="wrap">
+  <header>
+    <h1>OCE <span class="accent">Ranked Leaderboard</span></h1>
+    <p class="subtitle">Season 3 &mdash; oce-east</p>
+  </header>
+  <div class="controls">
+    <input class="search" type="text" id="search" placeholder="Search player...">
+    <label class="toggle-label">
+      <input type="checkbox" id="hideUnranked">
+      <span class="checkmark"></span>
+      Hide Unranked
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="sortPeak">
+      <span class="checkmark"></span>
+      Sort by Peak Rank
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="showDividers">
+      <span class="checkmark"></span>
+      Rank Dividers
+    </label>
+    <span class="last-updated">Last Updated: 23 April 2026</span>
+  </div>
+  <table id="lb">
+    <tbody>
+
+  <tr class="top-1" data-rank="Gold III" data-rating="1735" data-highest-rank="Platinum I" data-highest-rating="1762">
+    <td class="pos">1</td>
+    <td class="name"><a href="https://slapshot.gg/players/147030" target="_blank" rel="noopener">forehead</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1735</td>
+  </tr>
+
+  <tr class="top-2" data-rank="Gold III" data-rating="1732" data-highest-rank="Platinum I" data-highest-rating="1758">
+    <td class="pos">2</td>
+    <td class="name"><a href="https://slapshot.gg/players/866634" target="_blank" rel="noopener">sillysausage</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1732</td>
+  </tr>
+
+  <tr class="top-3" data-rank="Gold III" data-rating="1730" data-highest-rank="Platinum I" data-highest-rating="1746">
+    <td class="pos">3</td>
+    <td class="name"><a href="https://slapshot.gg/players/374530" target="_blank" rel="noopener">blegh</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1730</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1714" data-highest-rank="Gold III" data-highest-rating="1730">
+    <td class="pos">4</td>
+    <td class="name"><a href="https://slapshot.gg/players/104293" target="_blank" rel="noopener">jonny James</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1714</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1714" data-highest-rank="Gold III" data-highest-rating="1728">
+    <td class="pos">5</td>
+    <td class="name"><a href="https://slapshot.gg/players/104294" target="_blank" rel="noopener">Kobbie Maynoo</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1714</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1710" data-highest-rank="Platinum I" data-highest-rating="1764">
+    <td class="pos">6</td>
+    <td class="name"><a href="https://slapshot.gg/players/78446" target="_blank" rel="noopener">Moses</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1710</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1698" data-highest-rank="Gold III" data-highest-rating="1698">
+    <td class="pos">7</td>
+    <td class="name"><a href="https://slapshot.gg/players/918088" target="_blank" rel="noopener">Dumb</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1698</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1696" data-highest-rank="Platinum I" data-highest-rating="1765">
+    <td class="pos">8</td>
+    <td class="name"><a href="https://slapshot.gg/players/154" target="_blank" rel="noopener">baccy</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1696</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1693" data-highest-rank="Gold III" data-highest-rating="1693">
+    <td class="pos">9</td>
+    <td class="name"><a href="https://slapshot.gg/players/1701839" target="_blank" rel="noopener">JOEY</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1693</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1688" data-highest-rank="Gold III" data-highest-rating="1726">
+    <td class="pos">10</td>
+    <td class="name"><a href="https://slapshot.gg/players/231086" target="_blank" rel="noopener">zuza</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1688</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1687" data-highest-rank="Gold III" data-highest-rating="1699">
+    <td class="pos">11</td>
+    <td class="name"><a href="https://slapshot.gg/players/648" target="_blank" rel="noopener">Trug</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1687</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1670" data-highest-rank="Gold III" data-highest-rating="1673">
+    <td class="pos">12</td>
+    <td class="name"><a href="https://slapshot.gg/players/325" target="_blank" rel="noopener">end5d</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1670</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1667" data-highest-rank="Gold III" data-highest-rating="1679">
+    <td class="pos">13</td>
+    <td class="name"><a href="https://slapshot.gg/players/1322560" target="_blank" rel="noopener">Haelnorr</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1667</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1664" data-highest-rank="Platinum I" data-highest-rating="1744">
+    <td class="pos">14</td>
+    <td class="name"><a href="https://slapshot.gg/players/440" target="_blank" rel="noopener">alfie</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1664</td>
+  </tr>
+
+  <tr class="" data-rank="Gold III" data-rating="1662" data-highest-rank="Gold III" data-highest-rating="1674">
+    <td class="pos">15</td>
+    <td class="name"><a href="https://slapshot.gg/players/625139" target="_blank" rel="noopener">MiqeL</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_iii.png" alt="Gold III">
+      <span style="color:#f5b731">Gold III</span>
+    </td>
+    <td class="rating">1662</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1653" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">16</td>
+    <td class="name"><a href="https://slapshot.gg/players/66" target="_blank" rel="noopener">Spar</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1653</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1652" data-highest-rank="Gold III" data-highest-rating="1690">
+    <td class="pos">17</td>
+    <td class="name"><a href="https://slapshot.gg/players/889215" target="_blank" rel="noopener">JDB</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1652</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1649" data-highest-rank="Gold III" data-highest-rating="1695">
+    <td class="pos">18</td>
+    <td class="name"><a href="https://slapshot.gg/players/462563" target="_blank" rel="noopener">gecko</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1649</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1643" data-highest-rank="Platinum I" data-highest-rating="1792">
+    <td class="pos">19</td>
+    <td class="name"><a href="https://slapshot.gg/players/851143" target="_blank" rel="noopener">Leben James</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1643</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1641" data-highest-rank="Gold III" data-highest-rating="1737">
+    <td class="pos">20</td>
+    <td class="name"><a href="https://slapshot.gg/players/516" target="_blank" rel="noopener">yenakis</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1641</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1634" data-highest-rank="Gold II" data-highest-rating="1638">
+    <td class="pos">21</td>
+    <td class="name"><a href="https://slapshot.gg/players/156" target="_blank" rel="noopener">Dandy</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1634</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1634" data-highest-rank="Gold II" data-highest-rating="1644">
+    <td class="pos">22</td>
+    <td class="name"><a href="https://slapshot.gg/players/1085317" target="_blank" rel="noopener">arf</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1634</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1629" data-highest-rank="Gold III" data-highest-rating="1662">
+    <td class="pos">23</td>
+    <td class="name"><a href="https://slapshot.gg/players/438631" target="_blank" rel="noopener">HippoHugger4000</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1629</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1625" data-highest-rank="Gold III" data-highest-rating="1689">
+    <td class="pos">24</td>
+    <td class="name"><a href="https://slapshot.gg/players/149686" target="_blank" rel="noopener">Senior Jorge</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1625</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1618" data-highest-rank="Gold II" data-highest-rating="1628">
+    <td class="pos">25</td>
+    <td class="name"><a href="https://slapshot.gg/players/182" target="_blank" rel="noopener">duc nhan</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1618</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1616" data-highest-rank="Gold III" data-highest-rating="1671">
+    <td class="pos">26</td>
+    <td class="name"><a href="https://slapshot.gg/players/374559" target="_blank" rel="noopener">kevin food & drink</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1616</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1613" data-highest-rank="Gold II" data-highest-rating="1622">
+    <td class="pos">27</td>
+    <td class="name"><a href="https://slapshot.gg/players/1243647" target="_blank" rel="noopener">zenonix</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1613</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1608" data-highest-rank="Gold III" data-highest-rating="1706">
+    <td class="pos">28</td>
+    <td class="name"><a href="https://slapshot.gg/players/513063" target="_blank" rel="noopener">DooT</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1608</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1607" data-highest-rank="Gold III" data-highest-rating="1678">
+    <td class="pos">29</td>
+    <td class="name"><a href="https://slapshot.gg/players/1004826" target="_blank" rel="noopener">willzz</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1607</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1605" data-highest-rank="Gold II" data-highest-rating="1605">
+    <td class="pos">30</td>
+    <td class="name"><a href="https://slapshot.gg/players/157" target="_blank" rel="noopener">N1Q</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1605</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1597" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">31</td>
+    <td class="name"><a href="https://slapshot.gg/players/1022964" target="_blank" rel="noopener">El MoshyO</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1597</td>
+  </tr>
+
+  <tr class="" data-rank="Gold II" data-rating="1586" data-highest-rank="Gold II" data-highest-rating="1630">
+    <td class="pos">32</td>
+    <td class="name"><a href="https://slapshot.gg/players/592423" target="_blank" rel="noopener">T3jay76</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_ii.png" alt="Gold II">
+      <span style="color:#f5b731">Gold II</span>
+    </td>
+    <td class="rating">1586</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1569" data-highest-rank="Gold I" data-highest-rating="1569">
+    <td class="pos">33</td>
+    <td class="name"><a href="https://slapshot.gg/players/384090" target="_blank" rel="noopener">unc</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1569</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1568" data-highest-rank="Gold II" data-highest-rating="1614">
+    <td class="pos">34</td>
+    <td class="name"><a href="https://slapshot.gg/players/598" target="_blank" rel="noopener">Chebs</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1568</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1561" data-highest-rank="Gold II" data-highest-rating="1603">
+    <td class="pos">35</td>
+    <td class="name"><a href="https://slapshot.gg/players/830525" target="_blank" rel="noopener">Corzo</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1561</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1552" data-highest-rank="Gold II" data-highest-rating="1592">
+    <td class="pos">36</td>
+    <td class="name"><a href="https://slapshot.gg/players/124044" target="_blank" rel="noopener">CowArmy33</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1552</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1552" data-highest-rank="Gold II" data-highest-rating="1602">
+    <td class="pos">37</td>
+    <td class="name"><a href="https://slapshot.gg/players/935509" target="_blank" rel="noopener">kaidan</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1552</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1548" data-highest-rank="Gold II" data-highest-rating="1621">
+    <td class="pos">38</td>
+    <td class="name"><a href="https://slapshot.gg/players/429652" target="_blank" rel="noopener">JoshuaJoshua</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1548</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1546" data-highest-rank="Gold I" data-highest-rating="1546">
+    <td class="pos">39</td>
+    <td class="name"><a href="https://slapshot.gg/players/277948" target="_blank" rel="noopener">zablaxx</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1546</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1545" data-highest-rank="Gold II" data-highest-rating="1612">
+    <td class="pos">40</td>
+    <td class="name"><a href="https://slapshot.gg/players/660936" target="_blank" rel="noopener">jacko</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1545</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1535" data-highest-rank="Gold II" data-highest-rating="1580">
+    <td class="pos">41</td>
+    <td class="name"><a href="https://slapshot.gg/players/1006482" target="_blank" rel="noopener">AmusingDolphin</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1535</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1532" data-highest-rank="Gold II" data-highest-rating="1650">
+    <td class="pos">42</td>
+    <td class="name"><a href="https://slapshot.gg/players/417674" target="_blank" rel="noopener">Badza</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1532</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1524" data-highest-rank="Gold I" data-highest-rating="1554">
+    <td class="pos">43</td>
+    <td class="name"><a href="https://slapshot.gg/players/1085421" target="_blank" rel="noopener">Cooper Flagg Enthusiast</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1524</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1522" data-highest-rank="Gold II" data-highest-rating="1622">
+    <td class="pos">44</td>
+    <td class="name"><a href="https://slapshot.gg/players/1103112" target="_blank" rel="noopener">erson 2</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1522</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1515" data-highest-rank="Gold I" data-highest-rating="1563">
+    <td class="pos">45</td>
+    <td class="name"><a href="https://slapshot.gg/players/91687" target="_blank" rel="noopener">MassiveLegend</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1515</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1511" data-highest-rank="Gold II" data-highest-rating="1584">
+    <td class="pos">46</td>
+    <td class="name"><a href="https://slapshot.gg/players/2054959" target="_blank" rel="noopener">mellow</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1511</td>
+  </tr>
+
+  <tr class="" data-rank="Gold I" data-rating="1501" data-highest-rank="Gold I" data-highest-rating="1520">
+    <td class="pos">47</td>
+    <td class="name"><a href="https://slapshot.gg/players/2108991" target="_blank" rel="noopener">xdxavking</a></td>
+    <td class="rank-cell">
+      <img src="ranks/gold_i.png" alt="Gold I">
+      <span style="color:#f5b731">Gold I</span>
+    </td>
+    <td class="rating">1501</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1484" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">48</td>
+    <td class="name"><a href="https://slapshot.gg/players/2108992" target="_blank" rel="noopener">antspants444</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1484</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1484" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">49</td>
+    <td class="name"><a href="https://slapshot.gg/players/2113611" target="_blank" rel="noopener">USUGI VAMO</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1484</td>
+  </tr>
+
+  <tr class="" data-rank="Silver III" data-rating="1478" data-highest-rank="Silver III" data-highest-rating="1478">
+    <td class="pos">50</td>
+    <td class="name"><a href="https://slapshot.gg/players/2112339" target="_blank" rel="noopener">Wang King</a></td>
+    <td class="rank-cell">
+      <img src="ranks/silver_iii.png" alt="Silver III">
+      <span style="color:#a8bdd0">Silver III</span>
+    </td>
+    <td class="rating">1478</td>
+  </tr>
+
+  <tr class="" data-rank="Silver III" data-rating="1467" data-highest-rank="Gold I" data-highest-rating="1514">
+    <td class="pos">51</td>
+    <td class="name"><a href="https://slapshot.gg/players/464051" target="_blank" rel="noopener">Daddy Kermit</a></td>
+    <td class="rank-cell">
+      <img src="ranks/silver_iii.png" alt="Silver III">
+      <span style="color:#a8bdd0">Silver III</span>
+    </td>
+    <td class="rating">1467</td>
+  </tr>
+
+  <tr class="" data-rank="Silver III" data-rating="1466" data-highest-rank="Gold I" data-highest-rating="1500">
+    <td class="pos">52</td>
+    <td class="name"><a href="https://slapshot.gg/players/387542" target="_blank" rel="noopener">Aytreena</a></td>
+    <td class="rank-cell">
+      <img src="ranks/silver_iii.png" alt="Silver III">
+      <span style="color:#a8bdd0">Silver III</span>
+    </td>
+    <td class="rating">1466</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1460" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">53</td>
+    <td class="name"><a href="https://slapshot.gg/players/1107322" target="_blank" rel="noopener">Bread Durst</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1460</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1446" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">54</td>
+    <td class="name"><a href="https://slapshot.gg/players/2115464" target="_blank" rel="noopener">Paperman4020</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1446</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1440" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">55</td>
+    <td class="name"><a href="https://slapshot.gg/players/1524280" target="_blank" rel="noopener">Kean</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1440</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1440" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">56</td>
+    <td class="name"><a href="https://slapshot.gg/players/1629618" target="_blank" rel="noopener">Antarctic</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1440</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1399" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">57</td>
+    <td class="name"><a href="https://slapshot.gg/players/2119413" target="_blank" rel="noopener">4</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1399</td>
+  </tr>
+
+  <tr class="" data-rank="Silver II" data-rating="1396" data-highest-rank="Silver III" data-highest-rating="1444">
+    <td class="pos">58</td>
+    <td class="name"><a href="https://slapshot.gg/players/320077" target="_blank" rel="noopener">Ali younes</a></td>
+    <td class="rank-cell">
+      <img src="ranks/silver_ii.png" alt="Silver II">
+      <span style="color:#a8bdd0">Silver II</span>
+    </td>
+    <td class="rating">1396</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1380" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">59</td>
+    <td class="name"><a href="https://slapshot.gg/players/2117631" target="_blank" rel="noopener">GEORGE_LEMON01</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1380</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1379" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">60</td>
+    <td class="name"><a href="https://slapshot.gg/players/1154050" target="_blank" rel="noopener">Barna Turambar</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1379</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1379" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">61</td>
+    <td class="name"><a href="https://slapshot.gg/players/2118162" target="_blank" rel="noopener">dogeman</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1379</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1378" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">62</td>
+    <td class="name"><a href="https://slapshot.gg/players/1828608" target="_blank" rel="noopener">SuperRog</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1378</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1377" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">63</td>
+    <td class="name"><a href="https://slapshot.gg/players/2118104" target="_blank" rel="noopener">jedi</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1377</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1377" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">64</td>
+    <td class="name"><a href="https://slapshot.gg/players/2118108" target="_blank" rel="noopener">muxer</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1377</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1376" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">65</td>
+    <td class="name"><a href="https://slapshot.gg/players/620" target="_blank" rel="noopener">martin</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1376</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1375" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">66</td>
+    <td class="name"><a href="https://slapshot.gg/players/1107113" target="_blank" rel="noopener">Kitty Kitty</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1375</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1372" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">67</td>
+    <td class="name"><a href="https://slapshot.gg/players/2117024" target="_blank" rel="noopener">samwise</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1372</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1367" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">68</td>
+    <td class="name"><a href="https://slapshot.gg/players/2121252" target="_blank" rel="noopener">Mrjay</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1367</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1367" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">69</td>
+    <td class="name"><a href="https://slapshot.gg/players/2121255" target="_blank" rel="noopener">jackrholden14</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1367</td>
+  </tr>
+
+  <tr class="" data-rank="Silver I" data-rating="1362" data-highest-rank="Silver I" data-highest-rating="1362">
+    <td class="pos">70</td>
+    <td class="name"><a href="https://slapshot.gg/players/147" target="_blank" rel="noopener">cooper</a></td>
+    <td class="rank-cell">
+      <img src="ranks/silver_i.png" alt="Silver I">
+      <span style="color:#a8bdd0">Silver I</span>
+    </td>
+    <td class="rating">1362</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1360" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">71</td>
+    <td class="name"><a href="https://slapshot.gg/players/2116990" target="_blank" rel="noopener">The Laegend Moose</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1360</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1355" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">72</td>
+    <td class="name"><a href="https://slapshot.gg/players/289418" target="_blank" rel="noopener">SmokedBroccoli</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1355</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1353" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">73</td>
+    <td class="name"><a href="https://slapshot.gg/players/2119411" target="_blank" rel="noopener">Link__JokeR</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1353</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1343" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">74</td>
+    <td class="name"><a href="https://slapshot.gg/players/970519" target="_blank" rel="noopener">Bobs Bakery</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1343</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1342" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">75</td>
+    <td class="name"><a href="https://slapshot.gg/players/577268" target="_blank" rel="noopener">robopork</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1342</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1333" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">76</td>
+    <td class="name"><a href="https://slapshot.gg/players/2119421" target="_blank" rel="noopener">RecycleJeff</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1333</td>
+  </tr>
+
+  <tr class="" data-rank="Unranked" data-rating="1322" data-highest-rank="" data-highest-rating="0">
+    <td class="pos">77</td>
+    <td class="name"><a href="https://slapshot.gg/players/2115386" target="_blank" rel="noopener">dussypestroyer</a></td>
+    <td class="rank-cell">
+      <img src="ranks/unranked.png" alt="Unranked">
+      <span style="color:#7a8da6">Unranked</span>
+    </td>
+    <td class="rating">1322</td>
+  </tr>
+    </tbody>
+  </table>
 </div>
-<table>
-  <thead>
-    <tr>
-      <th data-col="pos">#<span class="arrow">&#8597;</span></th>
-      <th data-col="name">Name<span class="arrow">&#8597;</span></th>
-      <th data-col="rank">Rank<span class="arrow">&#8597;</span></th>
-      <th data-col="rating" class="sorted">Rating<span class="arrow">&#8595;</span></th>
-      <th data-col="matches">Matches<span class="arrow">&#8597;</span></th>
-      <th data-col="highest_rank">Highest Rank<span class="arrow">&#8597;</span></th>
-      <th data-col="highest_rating">Highest Rating<span class="arrow">&#8597;</span></th>
-    </tr>
-  </thead>
-  <tbody id="tbody"></tbody>
-</table>
 <script>
-const RANK_IMG = {
-  'Platinum III': 'ranks/plat_iii.png',
-  'Platinum II':  'ranks/plat_ii.png',
-  'Platinum I':   'ranks/plat_i.png',
-  'Gold III':     'ranks/gold_iii.png',
-  'Gold II':      'ranks/gold_ii.png',
-  'Gold I':       'ranks/gold_i.png',
-  'Silver III':   'ranks/silver_iii.png',
-  'Silver II':    'ranks/silver_ii.png',
-  'Silver I':     'ranks/silver_i.png',
-  'Bronze III':   'ranks/bronze_iii.png',
-  'Bronze II':    'ranks/bronze_ii.png',
-  'Bronze I':     'ranks/bronze_i.png',
-  'Unranked':     'ranks/unranked.png',
-};
-
-const rankBadge = r => {
-  const img = RANK_IMG[r] ? `<img src="${RANK_IMG[r]}" alt="">` : '';
-  return `<span class="rank-badge rank-${r}">${img}${r || 'Unranked'}</span>`;
-};
-
 const RANK_ORDER = [
-  'Platinum I','Gold III','Gold II','Gold I',
+  'Legend','Diamond',
+  'Platinum III','Platinum II','Platinum I',
+  'Gold III','Gold II','Gold I',
   'Silver III','Silver II','Silver I',
-  'Bronze III','Bronze II','Bronze I','Unranked',''
+  'Bronze III','Bronze II','Bronze I',
+  'Unranked',''
 ];
+const RANK_IMG = {
+  'Legend':      'ranks/legend.png',
+  'Diamond':     'ranks/diamond.png',
+  'Platinum III':'ranks/plat_iii.png','Platinum II':'ranks/plat_ii.png','Platinum I':'ranks/plat_i.png',
+  'Gold III':    'ranks/gold_iii.png','Gold II':'ranks/gold_ii.png','Gold I':'ranks/gold_i.png',
+  'Silver III':  'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png','Silver I':'ranks/silver_i.png',
+  'Bronze III':  'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png','Bronze I':'ranks/bronze_i.png',
+  'Unranked':    'ranks/unranked.png',
+};
+const RANK_COLOR = {
+  'Legend':      '#4fc3f7',
+  'Diamond':     '#4fc3f7',
+  'Platinum III':'#a78bfa','Platinum II':'#a78bfa','Platinum I':'#a78bfa',
+  'Gold III':    '#f5b731','Gold II':'#f5b731','Gold I':'#f5b731',
+  'Silver III':  '#a8bdd0','Silver II':'#a8bdd0','Silver I':'#a8bdd0',
+  'Bronze III':  '#cd7f32','Bronze II':'#cd7f32','Bronze I':'#cd7f32',
+  'Unranked':    '#7a8da6',
+};
+const RANK_THRESHOLD = {
+  'Legend':2080,'Diamond':2000,
+  'Platinum III':1900,'Platinum II':1820,'Platinum I':1740,
+  'Gold III':1660,'Gold II':1580,'Gold I':1500,
+  'Silver III':1440,'Silver II':1380,'Silver I':1320,
+  'Bronze III':1260,'Bronze II':1200,'Bronze I':1140,
+  'Unranked':0,
+};
+const PODIUM = ['top-1','top-2','top-3'];
+
 const rankVal = r => { const i = RANK_ORDER.indexOf(r); return i === -1 ? 99 : i; };
+const rankCellHtml = r => {
+  const img = RANK_IMG[r] ? `<img src="${RANK_IMG[r]}" alt="${r}">` : '';
+  const color = RANK_COLOR[r] || '#7a8da6';
+  return `${img}<span style="color:${color}">${r || 'Unranked'}</span>`;
+};
 
-const ALL = [{"pos": 1, "name": "Moses", "rank": "Platinum I", "rating": 1755, "matches": 276, "highest_rank": "Platinum I", "highest_rating": 1761, "id": "78446"}, {"pos": 2, "name": "forehead", "rank": "Gold III", "rating": 1735, "matches": 44, "highest_rank": "Platinum I", "highest_rating": 1757, "id": "147030"}, {"pos": 3, "name": "blegh", "rank": "Gold III", "rating": 1725, "matches": 43, "highest_rank": "Platinum I", "highest_rating": 1745, "id": "374530"}, {"pos": 4, "name": "Kobbie Maynoo", "rank": "Gold III", "rating": 1714, "matches": 166, "highest_rank": "Gold III", "highest_rating": 1728, "id": "104294"}, {"pos": 5, "name": "jonny James", "rank": "Gold III", "rating": 1714, "matches": 157, "highest_rank": "Gold III", "highest_rating": 1730, "id": "104293"}, {"pos": 6, "name": "baccy", "rank": "Gold III", "rating": 1696, "matches": 143, "highest_rank": "Platinum I", "highest_rating": 1765, "id": "154"}, {"pos": 7, "name": "yenakis", "rank": "Gold III", "rating": 1694, "matches": 257, "highest_rank": "Gold III", "highest_rating": 1737, "id": "516"}, {"pos": 8, "name": "JOEY", "rank": "Gold III", "rating": 1693, "matches": 28, "highest_rank": "Gold III", "highest_rating": 1693, "id": "1701839"}, {"pos": 9, "name": "zuza", "rank": "Gold III", "rating": 1688, "matches": 415, "highest_rank": "Gold III", "highest_rating": 1726, "id": "231086"}, {"pos": 10, "name": "Trug", "rank": "Gold III", "rating": 1687, "matches": 90, "highest_rank": "Gold III", "highest_rating": 1699, "id": "648"}, {"pos": 11, "name": "sillysausage", "rank": "Gold III", "rating": 1675, "matches": 253, "highest_rank": "Platinum I", "highest_rating": 1758, "id": "866634"}, {"pos": 12, "name": "end5d", "rank": "Gold III", "rating": 1670, "matches": 35, "highest_rank": "Gold III", "highest_rating": 1673, "id": "325"}, {"pos": 13, "name": "DooT", "rank": "Gold III", "rating": 1667, "matches": 93, "highest_rank": "Gold III", "highest_rating": 1706, "id": "513063"}, {"pos": 14, "name": "Haelnorr", "rank": "Gold III", "rating": 1667, "matches": 38, "highest_rank": "Gold III", "highest_rating": 1679, "id": "1322560"}, {"pos": 15, "name": "MiqeL", "rank": "Gold III", "rating": 1662, "matches": 44, "highest_rank": "Gold III", "highest_rating": 1674, "id": "625139"}, {"pos": 16, "name": "Spar", "rank": "Unranked", "rating": 1653, "matches": 9, "highest_rank": "", "highest_rating": "", "id": "66"}, {"pos": 17, "name": "JDB", "rank": "Gold II", "rating": 1651, "matches": 244, "highest_rank": "Gold III", "highest_rating": 1690, "id": "889215"}, {"pos": 18, "name": "Dumb", "rank": "Gold II", "rating": 1648, "matches": 221, "highest_rank": "Gold III", "highest_rating": 1670, "id": "918088"}, {"pos": 19, "name": "Leben James", "rank": "Gold II", "rating": 1643, "matches": 356, "highest_rank": "Platinum I", "highest_rating": 1792, "id": "851143"}, {"pos": 20, "name": "HippoHugger4000", "rank": "Gold II", "rating": 1642, "matches": 90, "highest_rank": "Gold III", "highest_rating": 1662, "id": "438631"}, {"pos": 21, "name": "Senior Jorge", "rank": "Gold II", "rating": 1635, "matches": 85, "highest_rank": "Gold III", "highest_rating": 1689, "id": "149686"}, {"pos": 22, "name": "arf", "rank": "Gold II", "rating": 1634, "matches": 71, "highest_rank": "Gold II", "highest_rating": 1644, "id": "1085317"}, {"pos": 23, "name": "gecko", "rank": "Gold II", "rating": 1627, "matches": 123, "highest_rank": "Gold III", "highest_rating": 1695, "id": "462563"}, {"pos": 24, "name": "duc nhan", "rank": "Gold II", "rating": 1618, "matches": 96, "highest_rank": "Gold II", "highest_rating": 1628, "id": "182"}, {"pos": 25, "name": "kevin food & drink", "rank": "Gold II", "rating": 1616, "matches": 29, "highest_rank": "Gold III", "highest_rating": 1671, "id": "374559"}, {"pos": 26, "name": "zenonix", "rank": "Gold II", "rating": 1613, "matches": 154, "highest_rank": "Gold II", "highest_rating": 1622, "id": "1243647"}, {"pos": 27, "name": "willzz", "rank": "Gold II", "rating": 1607, "matches": 58, "highest_rank": "Gold III", "highest_rating": 1678, "id": "1004826"}, {"pos": 28, "name": "N1Q", "rank": "Gold II", "rating": 1605, "matches": 11, "highest_rank": "Gold II", "highest_rating": 1605, "id": "157"}, {"pos": 29, "name": "Dandy", "rank": "Gold II", "rating": 1597, "matches": 173, "highest_rank": "Gold II", "highest_rating": 1610, "id": "156"}, {"pos": 30, "name": "El MoshyO", "rank": "Unranked", "rating": 1597, "matches": 5, "highest_rank": "", "highest_rating": "", "id": "1022964"}, {"pos": 31, "name": "alfie", "rank": "Gold II", "rating": 1594, "matches": 503, "highest_rank": "Platinum I", "highest_rating": 1744, "id": "440"}, {"pos": 32, "name": "unc", "rank": "Gold I", "rating": 1569, "matches": 12, "highest_rank": "Gold I", "highest_rating": 1569, "id": "384090"}, {"pos": 33, "name": "Chebs", "rank": "Gold I", "rating": 1568, "matches": 27, "highest_rank": "Gold II", "highest_rating": 1614, "id": "598"}, {"pos": 34, "name": "Corzo", "rank": "Gold I", "rating": 1561, "matches": 14, "highest_rank": "Gold II", "highest_rating": 1603, "id": "830525"}, {"pos": 35, "name": "Cooper Flagg Enthusiast", "rank": "Gold I", "rating": 1554, "matches": 18, "highest_rank": "Gold I", "highest_rating": 1554, "id": "1085421"}, {"pos": 36, "name": "kaidan", "rank": "Gold I", "rating": 1552, "matches": 153, "highest_rank": "Gold II", "highest_rating": 1602, "id": "935509"}, {"pos": 37, "name": "CowArmy33", "rank": "Gold I", "rating": 1552, "matches": 14, "highest_rank": "Gold II", "highest_rating": 1592, "id": "124044"}, {"pos": 38, "name": "JoshuaJoshua", "rank": "Gold I", "rating": 1548, "matches": 18, "highest_rank": "Gold II", "highest_rating": 1621, "id": "429652"}, {"pos": 39, "name": "jacko", "rank": "Gold I", "rating": 1545, "matches": 17, "highest_rank": "Gold II", "highest_rating": 1612, "id": "660936"}, {"pos": 40, "name": "T3jay76", "rank": "Gold I", "rating": 1542, "matches": 29, "highest_rank": "Gold II", "highest_rating": 1630, "id": "592423"}, {"pos": 41, "name": "AmusingDolphin", "rank": "Gold I", "rating": 1535, "matches": 19, "highest_rank": "Gold II", "highest_rating": 1580, "id": "1006482"}, {"pos": 42, "name": "Badza", "rank": "Gold I", "rating": 1532, "matches": 34, "highest_rank": "Gold II", "highest_rating": 1650, "id": "417674"}, {"pos": 43, "name": "mellow", "rank": "Gold I", "rating": 1522, "matches": 168, "highest_rank": "Gold II", "highest_rating": 1584, "id": "2054959"}, {"pos": 44, "name": "erson 2", "rank": "Gold I", "rating": 1522, "matches": 70, "highest_rank": "Gold II", "highest_rating": 1622, "id": "1103112"}, {"pos": 45, "name": "MassiveLegend", "rank": "Gold I", "rating": 1515, "matches": 54, "highest_rank": "Gold I", "highest_rating": 1563, "id": "91687"}, {"pos": 46, "name": "xdxavking", "rank": "Gold I", "rating": 1501, "matches": 14, "highest_rank": "Gold I", "highest_rating": 1520, "id": "2108991"}, {"pos": 47, "name": "zablaxx", "rank": "Gold I", "rating": 1495, "matches": 28, "highest_rank": "Gold I", "highest_rating": 1495, "id": "277948"}, {"pos": 48, "name": "antspants444", "rank": "Unranked", "rating": 1484, "matches": 4, "highest_rank": "", "highest_rating": "", "id": "2108992"}, {"pos": 49, "name": "USUGI VAMO", "rank": "Unranked", "rating": 1484, "matches": 4, "highest_rank": "", "highest_rating": "", "id": "2113611"}, {"pos": 50, "name": "Wang King", "rank": "Silver III", "rating": 1478, "matches": 12, "highest_rank": "Silver III", "highest_rating": 1478, "id": "2112339"}, {"pos": 51, "name": "Daddy Kermit", "rank": "Silver III", "rating": 1467, "matches": 29, "highest_rank": "Gold I", "highest_rating": 1514, "id": "464051"}, {"pos": 52, "name": "Aytreena", "rank": "Silver III", "rating": 1466, "matches": 18, "highest_rank": "Gold I", "highest_rating": 1500, "id": "387542"}, {"pos": 53, "name": "Bread Durst", "rank": "Unranked", "rating": 1460, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "1107322"}, {"pos": 54, "name": "Paperman4020", "rank": "Unranked", "rating": 1446, "matches": 6, "highest_rank": "", "highest_rating": "", "id": "2115464"}, {"pos": 55, "name": "Kean", "rank": "Unranked", "rating": 1440, "matches": 6, "highest_rank": "", "highest_rating": "", "id": "1524280"}, {"pos": 56, "name": "Antarctic", "rank": "Unranked", "rating": 1440, "matches": 3, "highest_rank": "", "highest_rating": "", "id": "1629618"}, {"pos": 57, "name": "Ali younes", "rank": "Silver II", "rating": 1419, "matches": 16, "highest_rank": "Silver III", "highest_rating": 1444, "id": "320077"}, {"pos": 58, "name": "4", "rank": "Unranked", "rating": 1399, "matches": 4, "highest_rank": "", "highest_rating": "", "id": "2119413"}, {"pos": 59, "name": "GEORGE_LEMON01", "rank": "Unranked", "rating": 1380, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2117631"}, {"pos": 60, "name": "dogeman", "rank": "Unranked", "rating": 1379, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2118162"}, {"pos": 61, "name": "Barna Turambar", "rank": "Unranked", "rating": 1379, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "1154050"}, {"pos": 62, "name": "SuperRog", "rank": "Unranked", "rating": 1378, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "1828608"}, {"pos": 63, "name": "muxer", "rank": "Unranked", "rating": 1377, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2118108"}, {"pos": 64, "name": "jedi", "rank": "Unranked", "rating": 1377, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2118104"}, {"pos": 65, "name": "martin", "rank": "Unranked", "rating": 1376, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "620"}, {"pos": 66, "name": "Kitty Kitty", "rank": "Unranked", "rating": 1375, "matches": 6, "highest_rank": "", "highest_rating": "", "id": "1107113"}, {"pos": 67, "name": "samwise", "rank": "Unranked", "rating": 1372, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2117024"}, {"pos": 68, "name": "Mrjay", "rank": "Unranked", "rating": 1367, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2121252"}, {"pos": 69, "name": "jackrholden14", "rank": "Unranked", "rating": 1367, "matches": 1, "highest_rank": "", "highest_rating": "", "id": "2121255"}, {"pos": 70, "name": "cooper", "rank": "Silver I", "rating": 1362, "matches": 11, "highest_rank": "Silver I", "highest_rating": 1362, "id": "147"}, {"pos": 71, "name": "The Laegend Moose", "rank": "Unranked", "rating": 1360, "matches": 4, "highest_rank": "", "highest_rating": "", "id": "2116990"}, {"pos": 72, "name": "SmokedBroccoli", "rank": "Unranked", "rating": 1355, "matches": 2, "highest_rank": "", "highest_rating": "", "id": "289418"}, {"pos": 73, "name": "Link__JokeR", "rank": "Unranked", "rating": 1353, "matches": 2, "highest_rank": "", "highest_rating": "", "id": "2119411"}, {"pos": 74, "name": "Bobs Bakery", "rank": "Unranked", "rating": 1343, "matches": 5, "highest_rank": "", "highest_rating": "", "id": "970519"}, {"pos": 75, "name": "robopork", "rank": "Unranked", "rating": 1342, "matches": 2, "highest_rank": "", "highest_rating": "", "id": "577268"}, {"pos": 76, "name": "RecycleJeff", "rank": "Unranked", "rating": 1333, "matches": 3, "highest_rank": "", "highest_rating": "", "id": "2119421"}, {"pos": 77, "name": "dussypestroyer", "rank": "Unranked", "rating": 1322, "matches": 9, "highest_rank": "", "highest_rating": "", "id": "2115386"}];
+const DIVIDER_TIERS = [
+  { rank:'Legend',       threshold:2080 },
+  { rank:'Diamond',      threshold:2000 },
+  { rank:'Platinum III', threshold:1900 },
+  { rank:'Platinum II',  threshold:1820 },
+  { rank:'Platinum I',   threshold:1740 },
+  { rank:'Gold III',     threshold:1660 },
+  { rank:'Gold II',      threshold:1580 },
+  { rank:'Gold I',       threshold:1500 },
+  { rank:'Silver III',   threshold:1440 },
+  { rank:'Silver II',    threshold:1380 },
+  { rank:'Silver I',     threshold:1320 },
+  { rank:'Bronze III',   threshold:1260 },
+  { rank:'Bronze II',    threshold:1200 },
+  { rank:'Bronze I',     threshold:1140 },
+];
 
-let sortCol = 'rating', sortAsc = false;
-let hideZero = false, hideUnranked = false, searchTerm = '';
+const makeDivider = (rank, isEmpty) => {
+  const tr = document.createElement('tr');
+  tr.className = 'rank-divider' + (isEmpty ? ' empty' : '');
+  const color = RANK_COLOR[rank] || '#7a8da6';
+  const img   = RANK_IMG[rank] ? `<img src="${RANK_IMG[rank]}" alt="${rank}">` : '';
+  const thr   = RANK_THRESHOLD[rank] != null ? RANK_THRESHOLD[rank] : '';
+  tr.innerHTML = `<td colspan="4"><div class="divider-inner">
+    <span class="div-line"></span>
+    ${img}
+    <span class="divider-rank" style="color:${color}">${rank}</span>
+    ${thr ? `<span class="divider-threshold">${thr}+</span>` : ''}
+    <span class="div-line"></span>
+  </div></td>`;
+  return tr;
+};
 
-function filtered() {
-  return ALL.filter(p => {
-    if (hideZero && p.matches === 0) return false;
-    if (hideUnranked && (p.rank === 'Unranked' || p.rank === '')) return false;
-    if (searchTerm && !p.name.toLowerCase().includes(searchTerm)) return false;
-    return true;
-  });
+const search        = document.getElementById('search');
+const hideUnranked  = document.getElementById('hideUnranked');
+const sortPeak      = document.getElementById('sortPeak');
+const showDividers  = document.getElementById('showDividers');
+const tbody         = document.querySelector('#lb tbody');
+const allRows       = Array.from(tbody.querySelectorAll('tr'));
+
+function getElo(row, byPeak) {
+  return Number(byPeak ? row.dataset.highestRating : row.dataset.rating) || 0;
 }
 
-function sorted(rows) {
-  return [...rows].sort((a, b) => {
-    let av = a[sortCol], bv = b[sortCol];
-    if (sortCol === 'rank' || sortCol === 'highest_rank') {
-      av = rankVal(av); bv = rankVal(bv);
-    } else if (typeof av === 'string') {
-      av = av.toLowerCase(); bv = bv.toLowerCase();
-    }
-    if (av === '' || av === null) av = sortAsc ? Infinity : -Infinity;
-    if (bv === '' || bv === null) bv = sortAsc ? Infinity : -Infinity;
-    return sortAsc ? (av > bv ? 1 : av < bv ? -1 : 0) : (av < bv ? 1 : av > bv ? -1 : 0);
-  });
+function placeRow(r, truePos, byPeak) {
+  tbody.appendChild(r);
+  r.style.display = '';
+  r.querySelector('td.pos').textContent = truePos + 1;
+  PODIUM.forEach(c => r.classList.remove(c));
+  if (truePos < 3) r.classList.add(PODIUM[truePos]);
+  const rank   = byPeak ? r.dataset.highestRank  : r.dataset.rank;
+  const rating = byPeak ? r.dataset.highestRating : r.dataset.rating;
+  r.querySelector('td.rank-cell').innerHTML = rankCellHtml(rank);
+  r.querySelector('td.rating').textContent  = rating || '—';
 }
 
-function render() {
-  const rows = sorted(filtered());
-  document.getElementById('count').textContent = rows.length + ' players';
-  const tbody = document.getElementById('tbody');
-  tbody.innerHTML = rows.map((p, i) => `
-    <tr>
-      <td class="pos">${i + 1}</td>
-      <td class="name"><a href="https://slapshot.gg/players/${p.id}" target="_blank" rel="noopener">${p.name}</a></td>
-      <td>${rankBadge(p.rank)}</td>
-      <td class="num">${p.rating}</td>
-      <td class="num">${p.matches}</td>
-      <td>${p.highest_rank ? rankBadge(p.highest_rank) : '—'}</td>
-      <td class="num">${p.highest_rating}</td>
-    </tr>`).join('');
+function update() {
+  const term       = search.value.toLowerCase();
+  const noUnranked = hideUnranked.checked;
+  const byPeak     = sortPeak.checked;
+  const withDivs   = showDividers.checked;
+
+  tbody.querySelectorAll('.rank-divider').forEach(d => d.remove());
+  allRows.forEach(r => r.style.display = 'none');
+
+  // Sort all rows first to establish true positions
+  const hideCheck = row => {
+    const chkRank = byPeak ? row.dataset.highestRank : row.dataset.rank;
+    return chkRank === 'Unranked' || chkRank === '';
+  };
+  const allSorted = [...allRows].sort((a, b) => getElo(b, byPeak) - getElo(a, byPeak));
+  // Assign true position ignoring search term (but still respecting hide-unranked)
+  const truePosMap = new Map();
+  let tp = 0;
+  allSorted.forEach(r => {
+    if (noUnranked && hideCheck(r)) return;
+    truePosMap.set(r, tp++);
+  });
+
+  // Now filter by search term for display
+  const visible = allSorted.filter(r => {
+    if (noUnranked && hideCheck(r)) return false;
+    return r.querySelector('td.name').textContent.toLowerCase().includes(term);
+  });
+
+  if (!withDivs) {
+    visible.forEach(r => placeRow(r, truePosMap.get(r), byPeak));
+    return;
+  }
+
+  // Threshold-based divider insertion — show all tiers, grey empty ones
+  const placed = new Set();
+  for (const { rank, threshold } of DIVIDER_TIERS) {
+    const inTier = visible.filter(r => !placed.has(r) && getElo(r, byPeak) >= threshold);
+    tbody.appendChild(makeDivider(rank, inTier.length === 0));
+    inTier.forEach(r => { placed.add(r); placeRow(r, truePosMap.get(r), byPeak); });
+  }
+  visible.filter(r => !placed.has(r)).forEach(r => placeRow(r, truePosMap.get(r), byPeak));
 }
 
-document.querySelectorAll('thead th').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.col;
-    if (sortCol === col) sortAsc = !sortAsc;
-    else { sortCol = col; sortAsc = col === 'name'; }
-    document.querySelectorAll('thead th').forEach(t => {
-      t.classList.remove('sorted');
-      t.querySelector('.arrow').innerHTML = '&#8597;';
-    });
-    th.classList.add('sorted');
-    th.querySelector('.arrow').innerHTML = sortAsc ? '&#8593;' : '&#8595;';
-    render();
-  });
-});
-
-document.getElementById('toggleZero').addEventListener('click', function() {
-  hideZero = !hideZero; this.classList.toggle('active', hideZero); render();
-});
-document.getElementById('toggleUnranked').addEventListener('click', function() {
-  hideUnranked = !hideUnranked; this.classList.toggle('active', hideUnranked); render();
-});
-document.getElementById('search').addEventListener('input', function() {
-  searchTerm = this.value.toLowerCase(); render();
-});
-
-render();
+search.addEventListener('input', update);
+hideUnranked.addEventListener('change', update);
+sortPeak.addEventListener('change', update);
+showDividers.addEventListener('change', update);
 </script>
 </body>
 </html>

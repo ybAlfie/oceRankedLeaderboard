@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCE Slapshot Leaderboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; color: #e2e8f0; font-family: system-ui, sans-serif; padding: 24px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; color: #fff; }
+  .subtitle { color: #64748b; font-size: 0.85rem; margin-bottom: 20px; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
+  .search { background: #1e2230; border: 1px solid #2d3348; color: #e2e8f0; padding: 7px 12px;
+             border-radius: 6px; font-size: 0.9rem; width: 220px; }
+  .search::placeholder { color: #475569; }
+  .search:focus { outline: none; border-color: #4f8ef7; }
+  .toggle { background: #1e2230; border: 1px solid #2d3348; color: #94a3b8; padding: 7px 14px;
+             border-radius: 6px; font-size: 0.85rem; cursor: pointer; transition: all .15s; }
+  .toggle.active { background: #4f8ef7; border-color: #4f8ef7; color: #fff; }
+  .count { color: #64748b; font-size: 0.85rem; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  thead th { background: #161b27; color: #94a3b8; font-weight: 600; text-align: left;
+              padding: 10px 14px; border-bottom: 1px solid #2d3348; white-space: nowrap;
+              cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
+  thead th:hover { color: #e2e8f0; }
+  thead th.sorted { color: #4f8ef7; }
+  thead th .arrow { margin-left: 4px; font-size: 0.7rem; opacity: 0.6; }
+  thead th.sorted .arrow { opacity: 1; }
+  tbody tr { border-bottom: 1px solid #1a1f2e; transition: background .1s; }
+  tbody tr:hover { background: #1a2035; }
+  td { padding: 9px 14px; }
+  td.pos { color: #475569; width: 48px; }
+  td.name { font-weight: 500; color: #fff; }
+  td.name a { color: inherit; text-decoration: none; }
+  td.name a:hover { color: #4f8ef7; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .rank-badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+                 font-size: 0.78rem; font-weight: 600; }
+  .rank-Platinum\ I  { background:#2a1f6e; color:#a78bfa; }
+  .rank-Gold\ III    { background:#2d2200; color:#f59e0b; }
+  .rank-Gold\ II     { background:#2d2200; color:#fbbf24; }
+  .rank-Gold\ I      { background:#2d2200; color:#fcd34d; }
+  .rank-Silver\ III  { background:#1e2530; color:#94a3b8; }
+  .rank-Silver\ II   { background:#1e2530; color:#cbd5e1; }
+  .rank-Silver\ I    { background:#1e2530; color:#e2e8f0; }
+  .rank-Bronze\ III  { background:#2a1a0e; color:#d97706; }
+  .rank-Bronze\ II   { background:#2a1a0e; color:#b45309; }
+  .rank-Bronze\ I    { background:#2a1a0e; color:#92400e; }
+  .rank-Unranked      { background:#1a1f2e; color:#475569; }
+  .rank-             { background:#1a1f2e; color:#475569; }
+  .rank-badge { display: inline-flex; align-items: center; gap: 5px; }
+  .rank-badge img { width: 20px; height: 20px; object-fit: contain; }
+</style>
+</head>
+<body>
+<h1>OCE Slapshot Leaderboard</h1>
+<p class="subtitle">Season 3 &mdash; oce-east</p>
+<div class="controls">
+  <input class="search" type="text" placeholder="Search name..." id="search">
+  <button class="toggle" id="toggleZero">Hide 0 matches</button>
+  <button class="toggle" id="toggleUnranked">Hide unranked</button>
+  <span class="count" id="count"></span>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th data-col="pos">#<span class="arrow">&#8597;</span></th>
+      <th data-col="name">Name<span class="arrow">&#8597;</span></th>
+      <th data-col="rank">Rank<span class="arrow">&#8597;</span></th>
+      <th data-col="rating" class="sorted">Rating<span class="arrow">&#8595;</span></th>
+      <th data-col="matches">Matches<span class="arrow">&#8597;</span></th>
+      <th data-col="highest_rank">Highest Rank<span class="arrow">&#8597;</span></th>
+      <th data-col="highest_rating">Highest Rating<span class="arrow">&#8597;</span></th>
+      <th data-col="win_rate">Win % (L10)<span class="arrow">&#8597;</span></th>
+      <th data-col="goals_per_game">Goals/G (L10)<span class="arrow">&#8597;</span></th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<script>
+const RANK_IMG = {
+  'Platinum III': 'ranks/plat_iii.png',
+  'Platinum II':  'ranks/plat_ii.png',
+  'Platinum I':   'ranks/plat_i.png',
+  'Gold III':     'ranks/gold_iii.png',
+  'Gold II':      'ranks/gold_ii.png',
+  'Gold I':       'ranks/gold_i.png',
+  'Silver III':   'ranks/silver_iii.png',
+  'Silver II':    'ranks/silver_ii.png',
+  'Silver I':     'ranks/silver_i.png',
+  'Bronze III':   'ranks/bronze_iii.png',
+  'Bronze II':    'ranks/bronze_ii.png',
+  'Bronze I':     'ranks/bronze_i.png',
+  'Unranked':     'ranks/unranked.png',
+};
+
+const rankBadge = r => {
+  const img = RANK_IMG[r] ? `<img src="${RANK_IMG[r]}" alt="">` : '';
+  return `<span class="rank-badge rank-${r}">${img}${r || 'Unranked'}</span>`;
+};
+
+const RANK_ORDER = [
+  'Platinum I','Gold III','Gold II','Gold I',
+  'Silver III','Silver II','Silver I',
+  'Bronze III','Bronze II','Bronze I','Unranked',''
+];
+const rankVal = r => { const i = RANK_ORDER.indexOf(r); return i === -1 ? 99 : i; };
+
+const ALL = [{"pos": 1, "name": "forehead", "rank": "Gold III", "rating": 1735, "matches": 56, "highest_rank": "Platinum I", "highest_rating": 1762, "win_rate": 62, "goals_per_game": 1.1, "recent_games": 8, "id": "147030"}, {"pos": 2, "name": "sillysausage", "rank": "Gold III", "rating": 1732, "matches": 267, "highest_rank": "Platinum I", "highest_rating": 1758, "win_rate": 75, "goals_per_game": 1.4, "recent_games": 8, "id": "866634"}, {"pos": 3, "name": "blegh", "rank": "Gold III", "rating": 1730, "matches": 48, "highest_rank": "Platinum I", "highest_rating": 1746, "win_rate": 57, "goals_per_game": 0.7, "recent_games": 7, "id": "374530"}, {"pos": 4, "name": "jonny James", "rank": "Gold III", "rating": 1714, "matches": 157, "highest_rank": "Gold III", "highest_rating": 1730, "win_rate": 50, "goals_per_game": 0.0, "recent_games": 10, "id": "104293"}, {"pos": 5, "name": "Kobbie Maynoo", "rank": "Gold III", "rating": 1714, "matches": 166, "highest_rank": "Gold III", "highest_rating": 1728, "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "104294"}, {"pos": 6, "name": "Moses", "rank": "Gold III", "rating": 1710, "matches": 289, "highest_rank": "Platinum I", "highest_rating": 1764, "win_rate": 33, "goals_per_game": 0.2, "recent_games": 9, "id": "78446"}, {"pos": 7, "name": "Dumb", "rank": "Gold III", "rating": 1698, "matches": 234, "highest_rank": "Gold III", "highest_rating": 1698, "win_rate": 67, "goals_per_game": 0.3, "recent_games": 3, "id": "918088"}, {"pos": 8, "name": "baccy", "rank": "Gold III", "rating": 1696, "matches": 143, "highest_rank": "Platinum I", "highest_rating": 1765, "win_rate": 43, "goals_per_game": 0.4, "recent_games": 7, "id": "154"}, {"pos": 9, "name": "JOEY", "rank": "Gold III", "rating": 1693, "matches": 28, "highest_rank": "Gold III", "highest_rating": 1693, "win_rate": 80, "goals_per_game": 1.0, "recent_games": 10, "id": "1701839"}, {"pos": 10, "name": "zuza", "rank": "Gold III", "rating": 1688, "matches": 415, "highest_rank": "Gold III", "highest_rating": 1726, "win_rate": 50, "goals_per_game": 1.1, "recent_games": 10, "id": "231086"}, {"pos": 11, "name": "Trug", "rank": "Gold III", "rating": 1687, "matches": 92, "highest_rank": "Gold III", "highest_rating": 1699, "win_rate": 60, "goals_per_game": 1.0, "recent_games": 10, "id": "648"}, {"pos": 12, "name": "end5d", "rank": "Gold III", "rating": 1670, "matches": 35, "highest_rank": "Gold III", "highest_rating": 1673, "win_rate": 100, "goals_per_game": 3.0, "recent_games": 1, "id": "325"}, {"pos": 13, "name": "Haelnorr", "rank": "Gold III", "rating": 1667, "matches": 38, "highest_rank": "Gold III", "highest_rating": 1679, "win_rate": 75, "goals_per_game": 2.2, "recent_games": 4, "id": "1322560"}, {"pos": 14, "name": "alfie", "rank": "Gold III", "rating": 1664, "matches": 528, "highest_rank": "Platinum I", "highest_rating": 1744, "win_rate": 57, "goals_per_game": 0.6, "recent_games": 7, "id": "440"}, {"pos": 15, "name": "MiqeL", "rank": "Gold III", "rating": 1662, "matches": 44, "highest_rank": "Gold III", "highest_rating": 1674, "win_rate": 70, "goals_per_game": 0.4, "recent_games": 10, "id": "625139"}, {"pos": 16, "name": "Spar", "rank": "Unranked", "rating": 1653, "matches": 9, "highest_rank": "", "highest_rating": "", "win_rate": 67, "goals_per_game": 0.7, "recent_games": 9, "id": "66"}, {"pos": 17, "name": "JDB", "rank": "Gold II", "rating": 1652, "matches": 248, "highest_rank": "Gold III", "highest_rating": 1690, "win_rate": 44, "goals_per_game": 0.8, "recent_games": 9, "id": "889215"}, {"pos": 18, "name": "gecko", "rank": "Gold II", "rating": 1649, "matches": 135, "highest_rank": "Gold III", "highest_rating": 1695, "win_rate": 50, "goals_per_game": 0.9, "recent_games": 10, "id": "462563"}, {"pos": 19, "name": "Leben James", "rank": "Gold II", "rating": 1643, "matches": 356, "highest_rank": "Platinum I", "highest_rating": 1792, "win_rate": 80, "goals_per_game": 1.4, "recent_games": 10, "id": "851143"}, {"pos": 20, "name": "yenakis", "rank": "Gold II", "rating": 1641, "matches": 274, "highest_rank": "Gold III", "highest_rating": 1737, "win_rate": 40, "goals_per_game": 1.0, "recent_games": 5, "id": "516"}, {"pos": 21, "name": "Dandy", "rank": "Gold II", "rating": 1634, "matches": 189, "highest_rank": "Gold II", "highest_rating": 1638, "win_rate": 50, "goals_per_game": 0.8, "recent_games": 8, "id": "156"}, {"pos": 22, "name": "arf", "rank": "Gold II", "rating": 1634, "matches": 71, "highest_rank": "Gold II", "highest_rating": 1644, "win_rate": 60, "goals_per_game": 1.1, "recent_games": 10, "id": "1085317"}, {"pos": 23, "name": "HippoHugger4000", "rank": "Gold II", "rating": 1629, "matches": 96, "highest_rank": "Gold III", "highest_rating": 1662, "win_rate": 33, "goals_per_game": 0.2, "recent_games": 6, "id": "438631"}, {"pos": 24, "name": "Senior Jorge", "rank": "Gold II", "rating": 1625, "matches": 86, "highest_rank": "Gold III", "highest_rating": 1689, "win_rate": 0, "goals_per_game": 1.0, "recent_games": 1, "id": "149686"}, {"pos": 25, "name": "duc nhan", "rank": "Gold II", "rating": 1618, "matches": 96, "highest_rank": "Gold II", "highest_rating": 1628, "win_rate": 89, "goals_per_game": 1.7, "recent_games": 9, "id": "182"}, {"pos": 26, "name": "kevin food & drink", "rank": "Gold II", "rating": 1616, "matches": 29, "highest_rank": "Gold III", "highest_rating": 1671, "win_rate": 57, "goals_per_game": 0.9, "recent_games": 7, "id": "374559"}, {"pos": 27, "name": "zenonix", "rank": "Gold II", "rating": 1613, "matches": 154, "highest_rank": "Gold II", "highest_rating": 1622, "win_rate": 56, "goals_per_game": 0.6, "recent_games": 9, "id": "1243647"}, {"pos": 28, "name": "DooT", "rank": "Gold II", "rating": 1608, "matches": 108, "highest_rank": "Gold III", "highest_rating": 1706, "win_rate": 14, "goals_per_game": 1.0, "recent_games": 7, "id": "513063"}, {"pos": 29, "name": "willzz", "rank": "Gold II", "rating": 1607, "matches": 58, "highest_rank": "Gold III", "highest_rating": 1678, "win_rate": 43, "goals_per_game": 0.4, "recent_games": 7, "id": "1004826"}, {"pos": 30, "name": "N1Q", "rank": "Gold II", "rating": 1605, "matches": 11, "highest_rank": "Gold II", "highest_rating": 1605, "win_rate": 67, "goals_per_game": 1.0, "recent_games": 6, "id": "157"}, {"pos": 31, "name": "El MoshyO", "rank": "Unranked", "rating": 1597, "matches": 5, "highest_rank": "", "highest_rating": "", "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "1022964"}, {"pos": 32, "name": "T3jay76", "rank": "Gold II", "rating": 1586, "matches": 44, "highest_rank": "Gold II", "highest_rating": 1630, "win_rate": 29, "goals_per_game": 0.3, "recent_games": 7, "id": "592423"}, {"pos": 33, "name": "unc", "rank": "Gold I", "rating": 1569, "matches": 12, "highest_rank": "Gold I", "highest_rating": 1569, "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "384090"}, {"pos": 34, "name": "Chebs", "rank": "Gold I", "rating": 1568, "matches": 27, "highest_rank": "Gold II", "highest_rating": 1614, "win_rate": 43, "goals_per_game": 0.6, "recent_games": 7, "id": "598"}, {"pos": 35, "name": "Corzo", "rank": "Gold I", "rating": 1561, "matches": 14, "highest_rank": "Gold II", "highest_rating": 1603, "win_rate": 50, "goals_per_game": 1.4, "recent_games": 10, "id": "830525"}, {"pos": 36, "name": "CowArmy33", "rank": "Gold I", "rating": 1552, "matches": 14, "highest_rank": "Gold II", "highest_rating": 1592, "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "124044"}, {"pos": 37, "name": "kaidan", "rank": "Gold I", "rating": 1552, "matches": 153, "highest_rank": "Gold II", "highest_rating": 1602, "win_rate": 14, "goals_per_game": 1.0, "recent_games": 7, "id": "935509"}, {"pos": 38, "name": "JoshuaJoshua", "rank": "Gold I", "rating": 1548, "matches": 18, "highest_rank": "Gold II", "highest_rating": 1621, "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "429652"}, {"pos": 39, "name": "zablaxx", "rank": "Gold I", "rating": 1546, "matches": 32, "highest_rank": "Gold I", "highest_rating": 1546, "win_rate": 75, "goals_per_game": 1.5, "recent_games": 4, "id": "277948"}, {"pos": 40, "name": "jacko", "rank": "Gold I", "rating": 1545, "matches": 17, "highest_rank": "Gold II", "highest_rating": 1612, "win_rate": 0, "goals_per_game": 0.0, "recent_games": 4, "id": "660936"}, {"pos": 41, "name": "AmusingDolphin", "rank": "Gold I", "rating": 1535, "matches": 19, "highest_rank": "Gold II", "highest_rating": 1580, "win_rate": 44, "goals_per_game": 0.4, "recent_games": 9, "id": "1006482"}, {"pos": 42, "name": "Badza", "rank": "Gold I", "rating": 1532, "matches": 34, "highest_rank": "Gold II", "highest_rating": 1650, "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "417674"}, {"pos": 43, "name": "Cooper Flagg Enthusiast", "rank": "Gold I", "rating": 1524, "matches": 20, "highest_rank": "Gold I", "highest_rating": 1554, "win_rate": 50, "goals_per_game": 0.5, "recent_games": 8, "id": "1085421"}, {"pos": 44, "name": "erson 2", "rank": "Gold I", "rating": 1522, "matches": 70, "highest_rank": "Gold II", "highest_rating": 1622, "win_rate": 50, "goals_per_game": 0.7, "recent_games": 6, "id": "1103112"}, {"pos": 45, "name": "MassiveLegend", "rank": "Gold I", "rating": 1515, "matches": 54, "highest_rank": "Gold I", "highest_rating": 1563, "win_rate": 25, "goals_per_game": 0.8, "recent_games": 4, "id": "91687"}, {"pos": 46, "name": "mellow", "rank": "Gold I", "rating": 1511, "matches": 180, "highest_rank": "Gold II", "highest_rating": 1584, "win_rate": 29, "goals_per_game": 0.6, "recent_games": 7, "id": "2054959"}, {"pos": 47, "name": "xdxavking", "rank": "Gold I", "rating": 1501, "matches": 14, "highest_rank": "Gold I", "highest_rating": 1520, "win_rate": 50, "goals_per_game": 0.4, "recent_games": 8, "id": "2108991"}, {"pos": 48, "name": "antspants444", "rank": "Unranked", "rating": 1484, "matches": 4, "highest_rank": "", "highest_rating": "", "win_rate": 67, "goals_per_game": 0.0, "recent_games": 3, "id": "2108992"}, {"pos": 49, "name": "USUGI VAMO", "rank": "Unranked", "rating": 1484, "matches": 4, "highest_rank": "", "highest_rating": "", "win_rate": 100, "goals_per_game": 1.0, "recent_games": 1, "id": "2113611"}, {"pos": 50, "name": "Wang King", "rank": "Silver III", "rating": 1478, "matches": 12, "highest_rank": "Silver III", "highest_rating": 1478, "win_rate": 43, "goals_per_game": 0.0, "recent_games": 7, "id": "2112339"}, {"pos": 51, "name": "Daddy Kermit", "rank": "Silver III", "rating": 1467, "matches": 29, "highest_rank": "Gold I", "highest_rating": 1514, "win_rate": 17, "goals_per_game": 0.7, "recent_games": 6, "id": "464051"}, {"pos": 52, "name": "Aytreena", "rank": "Silver III", "rating": 1466, "matches": 18, "highest_rank": "Gold I", "highest_rating": 1500, "win_rate": 33, "goals_per_game": 0.3, "recent_games": 3, "id": "387542"}, {"pos": 53, "name": "Bread Durst", "rank": "Unranked", "rating": 1460, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "1107322"}, {"pos": 54, "name": "Paperman4020", "rank": "Unranked", "rating": 1446, "matches": 6, "highest_rank": "", "highest_rating": "", "win_rate": 33, "goals_per_game": 0.0, "recent_games": 6, "id": "2115464"}, {"pos": 55, "name": "Kean", "rank": "Unranked", "rating": 1440, "matches": 6, "highest_rank": "", "highest_rating": "", "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "1524280"}, {"pos": 56, "name": "Antarctic", "rank": "Unranked", "rating": 1440, "matches": 3, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.7, "recent_games": 3, "id": "1629618"}, {"pos": 57, "name": "4", "rank": "Unranked", "rating": 1399, "matches": 4, "highest_rank": "", "highest_rating": "", "win_rate": 25, "goals_per_game": 0.0, "recent_games": 4, "id": "2119413"}, {"pos": 58, "name": "Ali younes", "rank": "Silver II", "rating": 1396, "matches": 17, "highest_rank": "Silver III", "highest_rating": 1444, "win_rate": "", "goals_per_game": "", "recent_games": 0, "id": "320077"}, {"pos": 59, "name": "GEORGE_LEMON01", "rank": "Unranked", "rating": 1380, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2117631"}, {"pos": 60, "name": "Barna Turambar", "rank": "Unranked", "rating": 1379, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "1154050"}, {"pos": 61, "name": "dogeman", "rank": "Unranked", "rating": 1379, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2118162"}, {"pos": 62, "name": "SuperRog", "rank": "Unranked", "rating": 1378, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 1.0, "recent_games": 1, "id": "1828608"}, {"pos": 63, "name": "jedi", "rank": "Unranked", "rating": 1377, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2118104"}, {"pos": 64, "name": "muxer", "rank": "Unranked", "rating": 1377, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2118108"}, {"pos": 65, "name": "martin", "rank": "Unranked", "rating": 1376, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "620"}, {"pos": 66, "name": "Kitty Kitty", "rank": "Unranked", "rating": 1375, "matches": 6, "highest_rank": "", "highest_rating": "", "win_rate": 17, "goals_per_game": 0.2, "recent_games": 6, "id": "1107113"}, {"pos": 67, "name": "samwise", "rank": "Unranked", "rating": 1372, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2117024"}, {"pos": 68, "name": "Mrjay", "rank": "Unranked", "rating": 1367, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2121252"}, {"pos": 69, "name": "jackrholden14", "rank": "Unranked", "rating": 1367, "matches": 1, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "2121255"}, {"pos": 70, "name": "cooper", "rank": "Silver I", "rating": 1362, "matches": 11, "highest_rank": "Silver I", "highest_rating": 1362, "win_rate": 10, "goals_per_game": 0.5, "recent_games": 10, "id": "147"}, {"pos": 71, "name": "The Laegend Moose", "rank": "Unranked", "rating": 1360, "matches": 4, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 3, "id": "2116990"}, {"pos": 72, "name": "SmokedBroccoli", "rank": "Unranked", "rating": 1355, "matches": 2, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 2, "id": "289418"}, {"pos": 73, "name": "Link__JokeR", "rank": "Unranked", "rating": 1353, "matches": 2, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 2, "id": "2119411"}, {"pos": 74, "name": "Bobs Bakery", "rank": "Unranked", "rating": 1343, "matches": 5, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "970519"}, {"pos": 75, "name": "robopork", "rank": "Unranked", "rating": 1342, "matches": 2, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 1, "id": "577268"}, {"pos": 76, "name": "RecycleJeff", "rank": "Unranked", "rating": 1333, "matches": 3, "highest_rank": "", "highest_rating": "", "win_rate": 0, "goals_per_game": 0.0, "recent_games": 3, "id": "2119421"}, {"pos": 77, "name": "dussypestroyer", "rank": "Unranked", "rating": 1322, "matches": 9, "highest_rank": "", "highest_rating": "", "win_rate": 11, "goals_per_game": 0.2, "recent_games": 9, "id": "2115386"}];
+
+let sortCol = 'rating', sortAsc = false;
+let hideZero = false, hideUnranked = false, searchTerm = '';
+
+function filtered() {
+  return ALL.filter(p => {
+    if (hideZero && p.matches === 0) return false;
+    if (hideUnranked && (p.rank === 'Unranked' || p.rank === '')) return false;
+    if (searchTerm && !p.name.toLowerCase().includes(searchTerm)) return false;
+    return true;
+  });
+}
+
+function sorted(rows) {
+  return [...rows].sort((a, b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (sortCol === 'rank' || sortCol === 'highest_rank') {
+      av = rankVal(av); bv = rankVal(bv);
+    } else if (typeof av === 'string') {
+      av = av.toLowerCase(); bv = bv.toLowerCase();
+    }
+    if (av === '' || av === null) av = sortAsc ? Infinity : -Infinity;
+    if (bv === '' || bv === null) bv = sortAsc ? Infinity : -Infinity;
+    return sortAsc ? (av > bv ? 1 : av < bv ? -1 : 0) : (av < bv ? 1 : av > bv ? -1 : 0);
+  });
+}
+
+function render() {
+  const rows = sorted(filtered());
+  document.getElementById('count').textContent = rows.length + ' players';
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rows.map((p, i) => `
+    <tr>
+      <td class="pos">${i + 1}</td>
+      <td class="name"><a href="https://slapshot.gg/players/${p.id}" target="_blank" rel="noopener">${p.name}</a></td>
+      <td>${rankBadge(p.rank)}</td>
+      <td class="num">${p.rating}</td>
+      <td class="num">${p.matches}</td>
+      <td>${p.highest_rank ? rankBadge(p.highest_rank) : '—'}</td>
+      <td class="num">${p.highest_rating}</td>
+      <td class="num">${p.win_rate !== '' ? p.win_rate + '%' : '—'}</td>
+      <td class="num">${p.goals_per_game !== '' ? p.goals_per_game : '—'}</td>
+    </tr>`).join('');
+}
+
+document.querySelectorAll('thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = col === 'name'; }
+    document.querySelectorAll('thead th').forEach(t => {
+      t.classList.remove('sorted');
+      t.querySelector('.arrow').innerHTML = '&#8597;';
+    });
+    th.classList.add('sorted');
+    th.querySelector('.arrow').innerHTML = sortAsc ? '&#8593;' : '&#8595;';
+    render();
+  });
+});
+
+document.getElementById('toggleZero').addEventListener('click', function() {
+  hideZero = !hideZero; this.classList.toggle('active', hideZero); render();
+});
+document.getElementById('toggleUnranked').addEventListener('click', function() {
+  hideUnranked = !hideUnranked; this.classList.toggle('active', hideUnranked); render();
+});
+document.getElementById('search').addEventListener('input', function() {
+  searchTerm = this.value.toLowerCase(); render();
+});
+
+render();
+</script>
+</body>
+</html>

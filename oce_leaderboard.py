@@ -13,7 +13,8 @@ Usage:
     python oce_leaderboard.py --max-discovery 50 # cap BFS growth
 
 Outputs (in output_dir/):
-    - leaderboard.html       interactive leaderboard, open in browser
+    - leaderboard.html          main leaderboard
+    - leaderboard_detailed.html detailed leaderboard with sortable stats
     - full_leaderboard.csv   raw CSV of all players sorted by rating
     - players.json           persisted list of all known player IDs
     - raw_data.json          full API response cache
@@ -149,6 +150,31 @@ def count_oce_season3_matches(player_data):
     )
 
 
+def calc_recent_stats(pid, player_data):
+    """Win rate and goals/game from the last 10 OCE casual matches in history."""
+    wins = goals = games = 0
+    for m in (player_data or {}).get("match_history", []) or []:
+        if not is_qualifying_match(m):
+            continue
+        stats = next(
+            (p.get("stats", {}) for p in (m.get("game_stats") or {}).get("players", [])
+             if str(p.get("game_user_id")) == str(pid)),
+            None
+        )
+        if stats is None:
+            continue
+        games += 1
+        wins  += stats.get("wins", 0)
+        goals += stats.get("goals", 0)
+    if games == 0:
+        return {"win_rate": None, "goals_per_game": None, "recent_games": 0}
+    return {
+        "win_rate":      round(wins / games * 100),
+        "goals_per_game": round(goals / games, 1),
+        "recent_games":  games,
+    }
+
+
 def fetch_player(pid, rate, session, cache):
     if pid in cache:
         return cache[pid]
@@ -170,6 +196,9 @@ def build_html(players):
             "matches": p["matches_played"] if p["matches_played"] is not None else 0,
             "highest_rank": p["highest_rank"] or "",
             "highest_rating": p["highest_rating"] if p["highest_rating"] is not None else "",
+            "win_rate": p.get("win_rate") if p.get("win_rate") is not None else "",
+            "goals_per_game": p.get("goals_per_game") if p.get("goals_per_game") is not None else "",
+            "recent_games": p.get("recent_games") or 0,
             "id": p["id"],
         }
         for i, p in enumerate(players)
@@ -248,6 +277,8 @@ def build_html(players):
       <th data-col="matches">Matches<span class="arrow">&#8597;</span></th>
       <th data-col="highest_rank">Highest Rank<span class="arrow">&#8597;</span></th>
       <th data-col="highest_rating">Highest Rating<span class="arrow">&#8597;</span></th>
+      <th data-col="win_rate">Win % (L10)<span class="arrow">&#8597;</span></th>
+      <th data-col="goals_per_game">Goals/G (L10)<span class="arrow">&#8597;</span></th>
     </tr>
   </thead>
   <tbody id="tbody"></tbody>
@@ -322,6 +353,8 @@ function render() {{
       <td class="num">${{p.matches}}</td>
       <td>${{p.highest_rank ? rankBadge(p.highest_rank) : '—'}}</td>
       <td class="num">${{p.highest_rating}}</td>
+      <td class="num">${{p.win_rate !== '' ? p.win_rate + '%' : '—'}}</td>
+      <td class="num">${{p.goals_per_game !== '' ? p.goals_per_game : '—'}}</td>
     </tr>`).join('');
 }}
 
@@ -590,6 +623,38 @@ def build_simple_html(players, last_updated=None):
     margin-left: auto;
   }}
 
+  /* Rank dividers */
+  .rank-divider {{ background: transparent !important; border-bottom: none !important; }}
+  .rank-divider:hover {{ background: transparent !important; }}
+  .rank-divider td {{ padding: 8px 16px 4px; }}
+  .rank-divider.empty {{ opacity: 0.3; }}
+  .divider-inner {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }}
+  .div-line {{
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+  }}
+  .divider-inner img {{ width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }}
+  .divider-rank {{
+    font-family: 'Teko', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }}
+  .divider-threshold {{
+    font-family: 'Teko', sans-serif;
+    font-size: 0.82rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }}
+
   /* Podium rows */
   .top-1 {{
     background: linear-gradient(90deg, rgba(197,155,42,0.22) 0%, rgba(197,155,42,0.10) 60%, rgba(28,48,84,0.45) 100%) !important;
@@ -631,6 +696,11 @@ def build_simple_html(players, last_updated=None):
       <span class="checkmark"></span>
       Sort by Peak Rank
     </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="showDividers">
+      <span class="checkmark"></span>
+      Rank Dividers
+    </label>
     <span class="last-updated">Last Updated: {last_updated}</span>
   </div>
   <table id="lb">
@@ -641,6 +711,7 @@ def build_simple_html(players, last_updated=None):
 </div>
 <script>
 const RANK_ORDER = [
+  'Legend','Diamond',
   'Platinum III','Platinum II','Platinum I',
   'Gold III','Gold II','Gold I',
   'Silver III','Silver II','Silver I',
@@ -648,18 +719,30 @@ const RANK_ORDER = [
   'Unranked',''
 ];
 const RANK_IMG = {{
+  'Legend':      'ranks/legend.png',
+  'Diamond':     'ranks/diamond.png',
   'Platinum III':'ranks/plat_iii.png','Platinum II':'ranks/plat_ii.png','Platinum I':'ranks/plat_i.png',
-  'Gold III':'ranks/gold_iii.png','Gold II':'ranks/gold_ii.png','Gold I':'ranks/gold_i.png',
-  'Silver III':'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png','Silver I':'ranks/silver_i.png',
-  'Bronze III':'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png','Bronze I':'ranks/bronze_i.png',
-  'Unranked':'ranks/unranked.png',
+  'Gold III':    'ranks/gold_iii.png','Gold II':'ranks/gold_ii.png','Gold I':'ranks/gold_i.png',
+  'Silver III':  'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png','Silver I':'ranks/silver_i.png',
+  'Bronze III':  'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png','Bronze I':'ranks/bronze_i.png',
+  'Unranked':    'ranks/unranked.png',
 }};
 const RANK_COLOR = {{
+  'Legend':      '#4fc3f7',
+  'Diamond':     '#4fc3f7',
   'Platinum III':'#a78bfa','Platinum II':'#a78bfa','Platinum I':'#a78bfa',
-  'Gold III':'#f5b731','Gold II':'#f5b731','Gold I':'#f5b731',
-  'Silver III':'#a8bdd0','Silver II':'#a8bdd0','Silver I':'#a8bdd0',
-  'Bronze III':'#cd7f32','Bronze II':'#cd7f32','Bronze I':'#cd7f32',
-  'Unranked':'#7a8da6',
+  'Gold III':    '#f5b731','Gold II':'#f5b731','Gold I':'#f5b731',
+  'Silver III':  '#a8bdd0','Silver II':'#a8bdd0','Silver I':'#a8bdd0',
+  'Bronze III':  '#cd7f32','Bronze II':'#cd7f32','Bronze I':'#cd7f32',
+  'Unranked':    '#7a8da6',
+}};
+const RANK_THRESHOLD = {{
+  'Legend':2080,'Diamond':2000,
+  'Platinum III':1900,'Platinum II':1820,'Platinum I':1740,
+  'Gold III':1660,'Gold II':1580,'Gold I':1500,
+  'Silver III':1440,'Silver II':1380,'Silver I':1320,
+  'Bronze III':1260,'Bronze II':1200,'Bronze I':1140,
+  'Unranked':0,
 }};
 const PODIUM = ['top-1','top-2','top-3'];
 
@@ -670,51 +753,110 @@ const rankCellHtml = r => {{
   return `${{img}}<span style="color:${{color}}">${{r || 'Unranked'}}</span>`;
 }};
 
-const search       = document.getElementById('search');
-const hideUnranked = document.getElementById('hideUnranked');
-const sortPeak     = document.getElementById('sortPeak');
-const tbody        = document.querySelector('#lb tbody');
-const allRows      = Array.from(tbody.querySelectorAll('tr'));
+const DIVIDER_TIERS = [
+  {{ rank:'Legend',       threshold:2080 }},
+  {{ rank:'Diamond',      threshold:2000 }},
+  {{ rank:'Platinum III', threshold:1900 }},
+  {{ rank:'Platinum II',  threshold:1820 }},
+  {{ rank:'Platinum I',   threshold:1740 }},
+  {{ rank:'Gold III',     threshold:1660 }},
+  {{ rank:'Gold II',      threshold:1580 }},
+  {{ rank:'Gold I',       threshold:1500 }},
+  {{ rank:'Silver III',   threshold:1440 }},
+  {{ rank:'Silver II',    threshold:1380 }},
+  {{ rank:'Silver I',     threshold:1320 }},
+  {{ rank:'Bronze III',   threshold:1260 }},
+  {{ rank:'Bronze II',    threshold:1200 }},
+  {{ rank:'Bronze I',     threshold:1140 }},
+];
+
+const makeDivider = (rank, isEmpty) => {{
+  const tr = document.createElement('tr');
+  tr.className = 'rank-divider' + (isEmpty ? ' empty' : '');
+  const color = RANK_COLOR[rank] || '#7a8da6';
+  const img   = RANK_IMG[rank] ? `<img src="${{RANK_IMG[rank]}}" alt="${{rank}}">` : '';
+  const thr   = RANK_THRESHOLD[rank] != null ? RANK_THRESHOLD[rank] : '';
+  tr.innerHTML = `<td colspan="4"><div class="divider-inner">
+    <span class="div-line"></span>
+    ${{img}}
+    <span class="divider-rank" style="color:${{color}}">${{rank}}</span>
+    ${{thr ? `<span class="divider-threshold">${{thr}}+</span>` : ''}}
+    <span class="div-line"></span>
+  </div></td>`;
+  return tr;
+}};
+
+const search        = document.getElementById('search');
+const hideUnranked  = document.getElementById('hideUnranked');
+const sortPeak      = document.getElementById('sortPeak');
+const showDividers  = document.getElementById('showDividers');
+const tbody         = document.querySelector('#lb tbody');
+const allRows       = Array.from(tbody.querySelectorAll('tr'));
+
+function getElo(row, byPeak) {{
+  return Number(byPeak ? row.dataset.highestRating : row.dataset.rating) || 0;
+}}
+
+function placeRow(r, truePos, byPeak) {{
+  tbody.appendChild(r);
+  r.style.display = '';
+  r.querySelector('td.pos').textContent = truePos + 1;
+  PODIUM.forEach(c => r.classList.remove(c));
+  if (truePos < 3) r.classList.add(PODIUM[truePos]);
+  const rank   = byPeak ? r.dataset.highestRank  : r.dataset.rank;
+  const rating = byPeak ? r.dataset.highestRating : r.dataset.rating;
+  r.querySelector('td.rank-cell').innerHTML = rankCellHtml(rank);
+  r.querySelector('td.rating').textContent  = rating || '—';
+}}
 
 function update() {{
-  const term      = search.value.toLowerCase();
+  const term       = search.value.toLowerCase();
   const noUnranked = hideUnranked.checked;
-  const byPeak    = sortPeak.checked;
+  const byPeak     = sortPeak.checked;
+  const withDivs   = showDividers.checked;
 
-  let visible = allRows.filter(row => {{
-    const name = row.querySelector('td.name').textContent.toLowerCase();
+  tbody.querySelectorAll('.rank-divider').forEach(d => d.remove());
+  allRows.forEach(r => r.style.display = 'none');
+
+  // Sort all rows first to establish true positions
+  const hideCheck = row => {{
     const chkRank = byPeak ? row.dataset.highestRank : row.dataset.rank;
-    const isUnranked = chkRank === 'Unranked' || chkRank === '';
-    return name.includes(term) && !(noUnranked && isUnranked);
+    return chkRank === 'Unranked' || chkRank === '';
+  }};
+  const allSorted = [...allRows].sort((a, b) => getElo(b, byPeak) - getElo(a, byPeak));
+  // Assign true position ignoring search term (but still respecting hide-unranked)
+  const truePosMap = new Map();
+  let tp = 0;
+  allSorted.forEach(r => {{
+    if (noUnranked && hideCheck(r)) return;
+    truePosMap.set(r, tp++);
   }});
 
-  if (byPeak) {{
-    visible.sort((a, b) => {{
-      const rv = rankVal(a.dataset.highestRank) - rankVal(b.dataset.highestRank);
-      return rv !== 0 ? rv : Number(b.dataset.highestRating) - Number(a.dataset.highestRating);
-    }});
-  }} else {{
-    visible.sort((a, b) => Number(b.dataset.rating) - Number(a.dataset.rating));
+  // Now filter by search term for display
+  const visible = allSorted.filter(r => {{
+    if (noUnranked && hideCheck(r)) return false;
+    return r.querySelector('td.name').textContent.toLowerCase().includes(term);
+  }});
+
+  if (!withDivs) {{
+    visible.forEach(r => placeRow(r, truePosMap.get(r), byPeak));
+    return;
   }}
 
-  // reorder DOM
-  allRows.forEach(r => {{ r.style.display = 'none'; PODIUM.forEach(c => r.classList.remove(c)); }});
-  visible.forEach((r, i) => {{
-    tbody.appendChild(r);
-    r.style.display = '';
-    r.querySelector('td.pos').textContent = i + 1;
-    if (i < 3) r.classList.add(PODIUM[i]);
-    // swap rank cell and rating
-    const rank  = byPeak ? r.dataset.highestRank  : r.dataset.rank;
-    const rating = byPeak ? r.dataset.highestRating : r.dataset.rating;
-    r.querySelector('td.rank-cell').innerHTML = rankCellHtml(rank);
-    r.querySelector('td.rating').textContent  = rating || '—';
-  }});
+  // Threshold-based divider insertion — show all tiers, grey empty ones
+  const placed = new Set();
+  for (const {{ rank, threshold }} of DIVIDER_TIERS) {{
+    const inTier = visible.filter(r => !placed.has(r) && getElo(r, byPeak) >= threshold);
+    tbody.appendChild(makeDivider(rank, inTier.length === 0));
+    inTier.forEach(r => {{ placed.add(r); placeRow(r, truePosMap.get(r), byPeak); }});
+  }}
+  visible.filter(r => !placed.has(r)).forEach(r => placeRow(r, truePosMap.get(r), byPeak));
 }}
 
 search.addEventListener('input', update);
 hideUnranked.addEventListener('change', update);
 sortPeak.addEventListener('change', update);
+showDividers.addEventListener('change', update);
 </script>
 </body>
 </html>"""
@@ -815,6 +957,7 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         uname = (pd.get("username") or "").strip()
         if not uname:
             continue
+        recent = calc_recent_stats(pid, pd)
         leaderboard.append({
             "name": uname,
             "id": pid,
@@ -823,6 +966,9 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
             "matches_played": r.get("matches_played"),
             "highest_rank": (r.get("highest_rank") or {}).get("name", ""),
             "highest_rating": r.get("highest_rating"),
+            "win_rate": recent["win_rate"],
+            "goals_per_game": recent["goals_per_game"],
+            "recent_games": recent["recent_games"],
         })
     leaderboard.sort(key=lambda x: (x["rating"] is None, -(x["rating"] or 0)))
 
@@ -838,17 +984,17 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     with open(raw_path, "w") as f:
         json.dump(cache, f, indent=2)
 
-    with open(output_dir / "leaderboard.html", "w", encoding="utf-8") as f:
+    with open(output_dir / "leaderboard_detailed.html", "w", encoding="utf-8") as f:
         f.write(build_html(leaderboard))
 
-    with open(output_dir / "leaderboard_simple.html", "w", encoding="utf-8") as f:
+    with open(output_dir / "leaderboard.html", "w", encoding="utf-8") as f:
         mtime = datetime.fromtimestamp(raw_path.stat().st_mtime)
         last_updated = f"{mtime.day} {mtime.strftime('%B %Y')}"
         f.write(build_simple_html(leaderboard, last_updated))
 
     print(f"\nDone! Written to {output_dir}/")
-    print(f"  leaderboard.html         interactive leaderboard")
-    print(f"  leaderboard_simple.html  simplified display leaderboard")
+    print(f"  leaderboard.html          main leaderboard")
+    print(f"  leaderboard_detailed.html detailed leaderboard with stats")
     print(f"  full_leaderboard.csv     {len(leaderboard)} players")
     print(f"  players.json             {len(all_ids)} known IDs ({len(new_ids)} new this run)")
 
