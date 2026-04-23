@@ -23,6 +23,7 @@ import argparse
 import csv
 import json
 import time
+from datetime import datetime
 from collections import deque
 from pathlib import Path
 
@@ -207,6 +208,8 @@ def build_html(players):
   td {{ padding: 9px 14px; }}
   td.pos {{ color: #475569; width: 48px; }}
   td.name {{ font-weight: 500; color: #fff; }}
+  td.name a {{ color: inherit; text-decoration: none; }}
+  td.name a:hover {{ color: #4f8ef7; }}
   td.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
   .rank-badge {{ display: inline-block; padding: 2px 8px; border-radius: 4px;
                  font-size: 0.78rem; font-weight: 600; }}
@@ -222,6 +225,8 @@ def build_html(players):
   .rank-Bronze\\ I    {{ background:#2a1a0e; color:#92400e; }}
   .rank-Unranked      {{ background:#1a1f2e; color:#475569; }}
   .rank-             {{ background:#1a1f2e; color:#475569; }}
+  .rank-badge {{ display: inline-flex; align-items: center; gap: 5px; }}
+  .rank-badge img {{ width: 20px; height: 20px; object-fit: contain; }}
 </style>
 </head>
 <body>
@@ -248,6 +253,27 @@ def build_html(players):
   <tbody id="tbody"></tbody>
 </table>
 <script>
+const RANK_IMG = {{
+  'Platinum III': 'ranks/plat_iii.png',
+  'Platinum II':  'ranks/plat_ii.png',
+  'Platinum I':   'ranks/plat_i.png',
+  'Gold III':     'ranks/gold_iii.png',
+  'Gold II':      'ranks/gold_ii.png',
+  'Gold I':       'ranks/gold_i.png',
+  'Silver III':   'ranks/silver_iii.png',
+  'Silver II':    'ranks/silver_ii.png',
+  'Silver I':     'ranks/silver_i.png',
+  'Bronze III':   'ranks/bronze_iii.png',
+  'Bronze II':    'ranks/bronze_ii.png',
+  'Bronze I':     'ranks/bronze_i.png',
+  'Unranked':     'ranks/unranked.png',
+}};
+
+const rankBadge = r => {{
+  const img = RANK_IMG[r] ? `<img src="${{RANK_IMG[r]}}" alt="">` : '';
+  return `<span class="rank-badge rank-${{r}}">${{img}}${{r || 'Unranked'}}</span>`;
+}};
+
 const RANK_ORDER = [
   'Platinum I','Gold III','Gold II','Gold I',
   'Silver III','Silver II','Silver I',
@@ -290,11 +316,11 @@ function render() {{
   tbody.innerHTML = rows.map((p, i) => `
     <tr>
       <td class="pos">${{i + 1}}</td>
-      <td class="name">${{p.name}}</td>
-      <td><span class="rank-badge rank-${{p.rank}}">${{p.rank || 'Unranked'}}</span></td>
+      <td class="name"><a href="https://slapshot.gg/players/${{p.id}}" target="_blank" rel="noopener">${{p.name}}</a></td>
+      <td>${{rankBadge(p.rank)}}</td>
       <td class="num">${{p.rating}}</td>
       <td class="num">${{p.matches}}</td>
-      <td><span class="rank-badge rank-${{p.highest_rank}}">${{p.highest_rank || '—'}}</span></td>
+      <td>${{p.highest_rank ? rankBadge(p.highest_rank) : '—'}}</td>
       <td class="num">${{p.highest_rating}}</td>
     </tr>`).join('');
 }}
@@ -325,6 +351,370 @@ document.getElementById('search').addEventListener('input', function() {{
 }});
 
 render();
+</script>
+</body>
+</html>"""
+
+
+def build_simple_html(players, last_updated=None):
+    RANK_IMG = {
+        'Platinum III': 'ranks/plat_iii.png', 'Platinum II': 'ranks/plat_ii.png',
+        'Platinum I':   'ranks/plat_i.png',
+        'Gold III':     'ranks/gold_iii.png',  'Gold II':  'ranks/gold_ii.png',
+        'Gold I':       'ranks/gold_i.png',
+        'Silver III':   'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png',
+        'Silver I':     'ranks/silver_i.png',
+        'Bronze III':   'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png',
+        'Bronze I':     'ranks/bronze_i.png',
+        'Unranked':     'ranks/unranked.png',
+    }
+    RANK_COLOR = {
+        'Platinum III': '#a78bfa', 'Platinum II': '#a78bfa', 'Platinum I': '#a78bfa',
+        'Gold III':     '#f5b731', 'Gold II':     '#f5b731', 'Gold I':     '#f5b731',
+        'Silver III':   '#a8bdd0', 'Silver II':   '#a8bdd0', 'Silver I':   '#a8bdd0',
+        'Bronze III':   '#cd7f32', 'Bronze II':   '#cd7f32', 'Bronze I':   '#cd7f32',
+        'Unranked':     '#7a8da6',
+    }
+
+    PODIUM_CLASS = {1: "top-1", 2: "top-2", 3: "top-3"}
+
+    rows = []
+    for i, p in enumerate(players, 1):
+        rank = p.get("rank") or ""
+        img = RANK_IMG.get(rank, "")
+        color = RANK_COLOR.get(rank, "#7a8da6")
+        img_tag = f'<img src="{img}" alt="{rank}">' if img else ""
+        extra_class = PODIUM_CLASS.get(i, "")
+        highest_rank = p.get("highest_rank") or ""
+        highest_rating = p.get("highest_rating") or 0
+        rows.append(f"""
+  <tr class="{extra_class}" data-rank="{rank}" data-rating="{p['rating'] or 0}" data-highest-rank="{highest_rank}" data-highest-rating="{highest_rating}">
+    <td class="pos">{i}</td>
+    <td class="name"><a href="https://slapshot.gg/players/{p['id']}" target="_blank" rel="noopener">{p['name']}</a></td>
+    <td class="rank-cell">
+      {img_tag}
+      <span style="color:{color}">{rank or "Unranked"}</span>
+    </td>
+    <td class="rating">{p['rating'] if p['rating'] is not None else "—"}</td>
+  </tr>""")
+
+    rows_html = "\n".join(rows)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCE Ranked Leaderboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {{
+    --navy-deep:  #0a1628;
+    --navy:       #142238;
+    --navy-mid:   #1c3054;
+    --cyan:       #4fc3f7;
+    --gold:       #f5b731;
+    --text:       #e8edf4;
+    --muted:      #7a8da6;
+  }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    background: var(--navy-deep);
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(27,107,158,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(245,183,49,0.06) 0%, transparent 50%);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    padding: 40px 24px;
+  }}
+  header {{
+    text-align: center;
+    margin-bottom: 40px;
+  }}
+  h1 {{
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.5rem;
+    letter-spacing: 0.15em;
+    color: var(--text);
+    line-height: 1;
+  }}
+  h1 .accent {{
+    color: var(--gold);
+  }}
+  .subtitle {{
+    font-family: 'Teko', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-top: 6px;
+  }}
+  .wrap {{
+    max-width: 780px;
+    margin: 0 auto;
+  }}
+  table {{
+    width: 100%;
+    border-collapse: collapse;
+  }}
+  tr {{
+    transition: background 0.15s;
+    border-radius: 8px;
+  }}
+  tbody tr {{
+    background: rgba(28, 48, 84, 0.45);
+    border-bottom: 4px solid var(--navy-deep);
+  }}
+  tbody tr:hover {{ background: rgba(79,195,247,0.07); }}
+  td {{
+    padding: 14px 16px;
+    vertical-align: middle;
+  }}
+  td:first-child {{ border-radius: 8px 0 0 8px; }}
+  td:last-child  {{ border-radius: 0 8px 8px 0; }}
+  td.pos {{
+    font-family: 'Teko', sans-serif;
+    font-size: 1.1rem;
+    color: var(--muted);
+    width: 48px;
+    text-align: right;
+    padding-right: 20px;
+  }}
+  td.name {{
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    letter-spacing: 0.05em;
+  }}
+  td.name a {{
+    color: var(--text);
+    text-decoration: none;
+    transition: color 0.15s;
+  }}
+  td.name a:hover {{ color: var(--cyan); }}
+  td.rank-cell {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Teko', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }}
+  td.rank-cell img {{
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }}
+  td.rating {{
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    color: var(--cyan);
+    text-align: right;
+    letter-spacing: 0.04em;
+  }}
+
+  /* Controls */
+  .controls {{
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }}
+  .search {{
+    background: #142238;
+    border: 1px solid rgba(79,195,247,0.15);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 8px 14px;
+    width: 240px;
+    outline: none;
+    transition: border-color 0.15s;
+  }}
+  .search::placeholder {{ color: var(--muted); }}
+  .search:focus {{ border-color: var(--cyan); }}
+  .toggle-label {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Teko', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }}
+  .toggle-label input {{ display: none; }}
+  .checkmark {{
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(79,195,247,0.3);
+    border-radius: 4px;
+    background: #142238;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, background 0.15s;
+    flex-shrink: 0;
+  }}
+  .toggle-label input:checked + .checkmark {{
+    background: var(--cyan);
+    border-color: var(--cyan);
+  }}
+  .toggle-label input:checked + .checkmark::after {{
+    content: '';
+    display: block;
+    width: 5px;
+    height: 9px;
+    border: 2px solid #0a1628;
+    border-top: none;
+    border-left: none;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }}
+  .toggle-label:hover .checkmark {{ border-color: var(--cyan); }}
+  .last-updated {{
+    font-family: 'Teko', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-left: auto;
+  }}
+
+  /* Podium rows */
+  .top-1 {{
+    background: linear-gradient(90deg, rgba(197,155,42,0.22) 0%, rgba(197,155,42,0.10) 60%, rgba(28,48,84,0.45) 100%) !important;
+    border-left: 3px solid #f5b731;
+  }}
+  .top-1 td.pos {{ color: #f5b731; font-size: 1.3rem; }}
+  .top-1 td.name a {{ color: #f5d442; }}
+
+  .top-2 {{
+    background: linear-gradient(90deg, rgba(168,189,208,0.18) 0%, rgba(168,189,208,0.08) 60%, rgba(28,48,84,0.45) 100%) !important;
+    border-left: 3px solid #a8bdd0;
+  }}
+  .top-2 td.pos {{ color: #a8bdd0; font-size: 1.3rem; }}
+  .top-2 td.name a {{ color: #c8dae8; }}
+
+  .top-3 {{
+    background: linear-gradient(90deg, rgba(205,127,50,0.18) 0%, rgba(205,127,50,0.08) 60%, rgba(28,48,84,0.45) 100%) !important;
+    border-left: 3px solid #cd7f32;
+  }}
+  .top-3 td.pos {{ color: #cd7f32; font-size: 1.3rem; }}
+  .top-3 td.name a {{ color: #e0974a; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>OCE <span class="accent">Ranked Leaderboard</span></h1>
+    <p class="subtitle">Season 3 &mdash; oce-east</p>
+  </header>
+  <div class="controls">
+    <input class="search" type="text" id="search" placeholder="Search player...">
+    <label class="toggle-label">
+      <input type="checkbox" id="hideUnranked">
+      <span class="checkmark"></span>
+      Hide Unranked
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" id="sortPeak">
+      <span class="checkmark"></span>
+      Sort by Peak Rank
+    </label>
+    <span class="last-updated">Last Updated: {last_updated}</span>
+  </div>
+  <table id="lb">
+    <tbody>
+{rows_html}
+    </tbody>
+  </table>
+</div>
+<script>
+const RANK_ORDER = [
+  'Platinum III','Platinum II','Platinum I',
+  'Gold III','Gold II','Gold I',
+  'Silver III','Silver II','Silver I',
+  'Bronze III','Bronze II','Bronze I',
+  'Unranked',''
+];
+const RANK_IMG = {{
+  'Platinum III':'ranks/plat_iii.png','Platinum II':'ranks/plat_ii.png','Platinum I':'ranks/plat_i.png',
+  'Gold III':'ranks/gold_iii.png','Gold II':'ranks/gold_ii.png','Gold I':'ranks/gold_i.png',
+  'Silver III':'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png','Silver I':'ranks/silver_i.png',
+  'Bronze III':'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png','Bronze I':'ranks/bronze_i.png',
+  'Unranked':'ranks/unranked.png',
+}};
+const RANK_COLOR = {{
+  'Platinum III':'#a78bfa','Platinum II':'#a78bfa','Platinum I':'#a78bfa',
+  'Gold III':'#f5b731','Gold II':'#f5b731','Gold I':'#f5b731',
+  'Silver III':'#a8bdd0','Silver II':'#a8bdd0','Silver I':'#a8bdd0',
+  'Bronze III':'#cd7f32','Bronze II':'#cd7f32','Bronze I':'#cd7f32',
+  'Unranked':'#7a8da6',
+}};
+const PODIUM = ['top-1','top-2','top-3'];
+
+const rankVal = r => {{ const i = RANK_ORDER.indexOf(r); return i === -1 ? 99 : i; }};
+const rankCellHtml = r => {{
+  const img = RANK_IMG[r] ? `<img src="${{RANK_IMG[r]}}" alt="${{r}}">` : '';
+  const color = RANK_COLOR[r] || '#7a8da6';
+  return `${{img}}<span style="color:${{color}}">${{r || 'Unranked'}}</span>`;
+}};
+
+const search       = document.getElementById('search');
+const hideUnranked = document.getElementById('hideUnranked');
+const sortPeak     = document.getElementById('sortPeak');
+const tbody        = document.querySelector('#lb tbody');
+const allRows      = Array.from(tbody.querySelectorAll('tr'));
+
+function update() {{
+  const term      = search.value.toLowerCase();
+  const noUnranked = hideUnranked.checked;
+  const byPeak    = sortPeak.checked;
+
+  let visible = allRows.filter(row => {{
+    const name = row.querySelector('td.name').textContent.toLowerCase();
+    const chkRank = byPeak ? row.dataset.highestRank : row.dataset.rank;
+    const isUnranked = chkRank === 'Unranked' || chkRank === '';
+    return name.includes(term) && !(noUnranked && isUnranked);
+  }});
+
+  if (byPeak) {{
+    visible.sort((a, b) => {{
+      const rv = rankVal(a.dataset.highestRank) - rankVal(b.dataset.highestRank);
+      return rv !== 0 ? rv : Number(b.dataset.highestRating) - Number(a.dataset.highestRating);
+    }});
+  }} else {{
+    visible.sort((a, b) => Number(b.dataset.rating) - Number(a.dataset.rating));
+  }}
+
+  // reorder DOM
+  allRows.forEach(r => {{ r.style.display = 'none'; PODIUM.forEach(c => r.classList.remove(c)); }});
+  visible.forEach((r, i) => {{
+    tbody.appendChild(r);
+    r.style.display = '';
+    r.querySelector('td.pos').textContent = i + 1;
+    if (i < 3) r.classList.add(PODIUM[i]);
+    // swap rank cell and rating
+    const rank  = byPeak ? r.dataset.highestRank  : r.dataset.rank;
+    const rating = byPeak ? r.dataset.highestRating : r.dataset.rating;
+    r.querySelector('td.rank-cell').innerHTML = rankCellHtml(rank);
+    r.querySelector('td.rating').textContent  = rating || '—';
+  }});
+}}
+
+search.addEventListener('input', update);
+hideUnranked.addEventListener('change', update);
+sortPeak.addEventListener('change', update);
 </script>
 </body>
 </html>"""
@@ -445,16 +835,22 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         for i, p in enumerate(leaderboard, 1):
             w.writerow({"position": i, **p})
 
-    with open(output_dir / "leaderboard.html", "w", encoding="utf-8") as f:
-        f.write(build_html(leaderboard))
-
     with open(raw_path, "w") as f:
         json.dump(cache, f, indent=2)
 
+    with open(output_dir / "leaderboard.html", "w", encoding="utf-8") as f:
+        f.write(build_html(leaderboard))
+
+    with open(output_dir / "leaderboard_simple.html", "w", encoding="utf-8") as f:
+        mtime = datetime.fromtimestamp(raw_path.stat().st_mtime)
+        last_updated = f"{mtime.day} {mtime.strftime('%B %Y')}"
+        f.write(build_simple_html(leaderboard, last_updated))
+
     print(f"\nDone! Written to {output_dir}/")
-    print(f"  leaderboard.html       open in browser")
-    print(f"  full_leaderboard.csv   {len(leaderboard)} players")
-    print(f"  players.json           {len(all_ids)} known IDs ({len(new_ids)} new this run)")
+    print(f"  leaderboard.html         interactive leaderboard")
+    print(f"  leaderboard_simple.html  simplified display leaderboard")
+    print(f"  full_leaderboard.csv     {len(leaderboard)} players")
+    print(f"  players.json             {len(all_ids)} known IDs ({len(new_ids)} new this run)")
 
 
 # ---- CLI ----

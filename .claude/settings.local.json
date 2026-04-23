@@ -5,7 +5,8 @@
       "Bash(where python3.exe)",
       "Read(//c/Users/alfie/AppData/Local/Programs/Python//**)",
       "Bash(ls /c/Python*)",
-      "Bash(py -c ' *)"
+      "Bash(py -c ' *)",
+      "WebFetch(domain:slapshot.gg)"
     ]
   }
 }

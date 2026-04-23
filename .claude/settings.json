@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:ybalfie.github.io)",
+      "Bash(curl -s https://ybalfie.github.io/osl-cards/index.html)",
+      "Bash(py -c ' *)"
+    ]
+  }
+}
