@@ -987,13 +987,13 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     with open(output_dir / "leaderboard_detailed.html", "w", encoding="utf-8") as f:
         f.write(build_html(leaderboard))
 
-    with open(output_dir / "leaderboard.html", "w", encoding="utf-8") as f:
+    with open(output_dir / "index.html", "w", encoding="utf-8") as f:
         mtime = datetime.fromtimestamp(raw_path.stat().st_mtime)
         last_updated = f"{mtime.day} {mtime.strftime('%B %Y')}"
         f.write(build_simple_html(leaderboard, last_updated))
 
     print(f"\nDone! Written to {output_dir}/")
-    print(f"  leaderboard.html          main leaderboard")
+    print(f"  index.html                main leaderboard")
     print(f"  leaderboard_detailed.html detailed leaderboard with stats")
     print(f"  full_leaderboard.csv     {len(leaderboard)} players")
     print(f"  players.json             {len(all_ids)} known IDs ({len(new_ids)} new this run)")
