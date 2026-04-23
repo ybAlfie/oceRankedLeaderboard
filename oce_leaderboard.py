@@ -12,8 +12,8 @@ Usage:
     python oce_leaderboard.py --resume           # skip already-cached IDs
     python oce_leaderboard.py --max-discovery 50 # cap BFS growth
 
-Outputs (in output_dir/):
-    - leaderboard.html          main leaderboard
+Outputs (in docs/):
+    - index.html              main leaderboard (served by GitHub Pages)
     - leaderboard_detailed.html detailed leaderboard with sortable stats
     - full_leaderboard.csv   raw CSV of all players sorted by rating
     - players.json           persisted list of all known player IDs
@@ -1005,8 +1005,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--players", default="players.json",
                         help="Path to the player ID list (default: players.json)")
-    parser.add_argument("--output", default="output",
-                        help="Directory to write outputs to (default: output)")
+    parser.add_argument("--output", default="docs",
+                        help="Directory to write outputs to (default: docs)")
     parser.add_argument("--no-discover", action="store_true",
                         help="Skip Phase 2 BFS discovery")
     parser.add_argument("--max-discovery", type=int, default=DEFAULT_MAX_DISCOVERY,

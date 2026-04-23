@@ -3,10 +3,10 @@ __pycache__/
 *.pyc
 
 # Large API cache — regenerated on each run
-output/raw_data.json
+docs/raw_data.json
 
 # Claude Code internal settings
 .claude/
 
 # Generated CSV — the HTML files are the shareable outputs
-output/full_leaderboard.csv
+docs/full_leaderboard.csv
