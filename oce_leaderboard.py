@@ -10,6 +10,7 @@ Usage:
     python oce_leaderboard.py                    # full run
     python oce_leaderboard.py --no-discover      # skip BFS, just refresh known IDs
     python oce_leaderboard.py --resume           # skip already-cached IDs
+    python oce_leaderboard.py --deep-search      # BFS follows customs too, not just casual
     python oce_leaderboard.py --max-discovery 50 # cap BFS growth
 
 Outputs (in docs/):
@@ -40,7 +41,7 @@ DEFAULT_MAX_DISCOVERY = 500 # Cap on new players to discover via BFS
 
 SEASON3_START = "2025-09-23"  # Only follow matches from this date onward
 CASUAL_MATCH_TYPE = "casual"  # Ranked game mode; excludes pond, customs
-MIN_OCE_SEASON3_MATCHES = 2   # Min OCE Season 3 matches to keep a discovered player
+MIN_RANKED_MATCHES = 1        # Min ranked matches_played to include a discovered player
 
 HEADERS = {
     "User-Agent": (
@@ -141,13 +142,26 @@ def is_qualifying_match(match):
     )
 
 
-def count_oce_season3_matches(player_data):
-    """Count OCE Season 3 matches (any mode) to gauge if a player is OCE-based."""
-    return sum(
-        1 for m in (player_data or {}).get("match_history", []) or []
-        if m.get("region") == OCE_REGION
-        and (m.get("created") or "") >= SEASON3_START
+def is_oce_season3_match(match):
+    """True if match is any mode in OCE from Season 3 onward (used for deep BFS)."""
+    return (
+        match.get("region") == OCE_REGION
+        and (match.get("created") or "") >= SEASON3_START
     )
+
+
+
+def is_oce_majority(player_data):
+    """True if OCE games >= non-OCE games in the player's last 10 matches."""
+    oce = non_oce = 0
+    for m in (player_data or {}).get("match_history", []) or []:
+        if oce + non_oce >= 10:
+            break
+        if m.get("region") == OCE_REGION:
+            oce += 1
+        else:
+            non_oce += 1
+    return oce >= non_oce
 
 
 def calc_recent_stats(pid, player_data):
@@ -684,7 +698,7 @@ def build_simple_html(players, last_updated=None):
 <div class="wrap">
   <header>
     <h1>OCE <span class="accent">Ranked Leaderboard</span></h1>
-    <p class="subtitle">Season 3 &mdash; oce-east</p>
+    <p class="subtitle">Slapshot: Rebound &mdash; Season 3</p>
   </header>
   <div class="controls">
     <input class="search" type="text" id="search" placeholder="Search player...">
@@ -703,7 +717,7 @@ def build_simple_html(players, last_updated=None):
       <span class="checkmark"></span>
       Rank Dividers
     </label>
-    <span class="last-updated">Last Updated: {last_updated}</span>
+    <span class="last-updated"><span id="playerCount"></span> Players &nbsp;&bull;&nbsp; Last Updated: {last_updated}</span>
   </div>
   <table id="lb">
     <tbody>
@@ -792,6 +806,7 @@ const sortPeak      = document.getElementById('sortPeak');
 const showDividers  = document.getElementById('showDividers');
 const tbody         = document.querySelector('#lb tbody');
 const allRows       = Array.from(tbody.querySelectorAll('tr'));
+document.getElementById('playerCount').textContent = allRows.length;
 
 function getElo(row, byPeak) {{
   return Number(byPeak ? row.dataset.highestRating : row.dataset.rating) || 0;
@@ -837,6 +852,7 @@ function update() {{
     if (noUnranked && hideCheck(r)) return false;
     return r.querySelector('td.name').textContent.toLowerCase().includes(term);
   }});
+  document.getElementById('playerCount').textContent = visible.length;
 
   if (!withDivs) {{
     visible.forEach(r => placeRow(r, truePosMap.get(r), byPeak));
@@ -888,7 +904,7 @@ def save_known_ids(players_path, ids):
     )
 
 
-def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY, resume=False):
+def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY, resume=False, deep_search=False):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -916,7 +932,9 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     # ---- Phase 2: BFS discovery ----
     new_ids = []
     if discover:
-        print(f"\n=== Phase 2: BFS discovery (cap: {max_discovery}) ===")
+        mode = "deep (all OCE S3 modes)" if deep_search else "standard (OCE casual S3)"
+        print(f"\n=== Phase 2: BFS discovery [{mode}] (cap: {max_discovery}) ===")
+        match_filter = is_oce_season3_match if deep_search else is_qualifying_match
         visited = set(cache.keys())
         queue = deque(known_ids)
 
@@ -927,15 +945,18 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
                 continue
 
             for match in player_data.get("match_history", []) or []:
-                if not is_qualifying_match(match):
+                if not match_filter(match):
                     continue
                 for new_id in extract_match_player_ids(match):
-                    if new_id in visited or new_id.startswith("bot-"):
+                    if new_id in visited or not new_id.isdigit():
                         continue
                     visited.add(new_id)
                     data = fetch_player(new_id, rate, session, cache)
                     pd = (data.get("player") or {})
-                    if count_oce_season3_matches(pd) < MIN_OCE_SEASON3_MATCHES:
+                    rd = (data.get("ranked") or {})
+                    if (rd.get("matches_played") or 0) < MIN_RANKED_MATCHES:
+                        continue
+                    if not is_oce_majority(pd):
                         continue
                     new_ids.append(new_id)
                     print(f"[discover {len(new_ids)}] id={new_id} ({pd.get('username', '?')})")
@@ -947,7 +968,13 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
 
     # ---- Save updated ID list ----
     all_ids = list(dict.fromkeys(known_ids + new_ids))
-    save_known_ids(players_path, all_ids)
+    # Prune players who have never played a ranked match — they'll never appear on
+    # the leaderboard and would waste fetch time on every future run.
+    save_ids = [
+        pid for pid in all_ids
+        if ((cache.get(pid, {}).get("ranked") or {}).get("matches_played") or 0) >= MIN_RANKED_MATCHES
+    ]
+    save_known_ids(players_path, save_ids)
 
     # ---- Build leaderboard ----
     leaderboard = []
@@ -956,6 +983,10 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         r = data.get("ranked") or {}
         uname = (pd.get("username") or "").strip()
         if not uname:
+            continue
+        if (r.get("matches_played") or 0) < MIN_RANKED_MATCHES:
+            continue
+        if not is_oce_majority(pd):
             continue
         recent = calc_recent_stats(pid, pd)
         leaderboard.append({
@@ -975,8 +1006,8 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     with open(output_dir / "full_leaderboard.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=[
             "position", "name", "rank", "rating", "matches_played",
-            "highest_rank", "highest_rating", "id",
-        ])
+            "highest_rank", "highest_rating", "win_rate", "goals_per_game", "id",
+        ], extrasaction="ignore")
         w.writeheader()
         for i, p in enumerate(leaderboard, 1):
             w.writerow({"position": i, **p})
@@ -996,7 +1027,8 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     print(f"  index.html                main leaderboard")
     print(f"  leaderboard_detailed.html detailed leaderboard with stats")
     print(f"  full_leaderboard.csv     {len(leaderboard)} players")
-    print(f"  players.json             {len(all_ids)} known IDs ({len(new_ids)} new this run)")
+    pruned = len(all_ids) - len(save_ids)
+    print(f"  players.json             {len(save_ids)} known IDs ({len(new_ids)} new, {pruned} pruned)")
 
 
 # ---- CLI ----
@@ -1014,11 +1046,14 @@ if __name__ == "__main__":
     parser.add_argument("--delay", type=float, default=DELAY_SECONDS,
                         help=f"Seconds between requests (default: {DELAY_SECONDS})")
     parser.add_argument("--resume", action="store_true",
-                        help="Load output/raw_data.json and skip already-fetched IDs")
+                        help="Load docs/raw_data.json and skip already-fetched IDs")
+    parser.add_argument("--deep-search", action="store_true",
+                        help="BFS follows all OCE S3 match types (not just casual) to find players in customs")
     args = parser.parse_args()
 
     DELAY_SECONDS = args.delay
     run(args.players, args.output,
         discover=not args.no_discover,
         max_discovery=args.max_discovery,
-        resume=args.resume)
+        resume=args.resume,
+        deep_search=args.deep_search)
