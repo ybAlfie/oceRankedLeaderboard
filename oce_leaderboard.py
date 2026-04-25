@@ -1020,7 +1020,7 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
 
     with open(output_dir / "index.html", "w", encoding="utf-8") as f:
         mtime = datetime.fromtimestamp(raw_path.stat().st_mtime)
-        last_updated = f"{mtime.day} {mtime.strftime('%B %Y')}"
+        last_updated = f"{mtime.day} {mtime.strftime('%B %Y %H:%M')}"
         f.write(build_simple_html(leaderboard, last_updated))
 
     print(f"\nDone! Written to {output_dir}/")
