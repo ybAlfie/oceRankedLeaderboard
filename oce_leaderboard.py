@@ -12,6 +12,9 @@ Usage:
     python oce_leaderboard.py --resume           # skip already-cached IDs
     python oce_leaderboard.py --deep-search      # BFS follows customs too, not just casual
     python oce_leaderboard.py --max-discovery 50 # cap BFS growth
+    python oce_leaderboard.py --quick 440        # cheap update: refresh seed (id=440) +
+                                                 # everyone in their recent matches, then
+                                                 # BFS one+ level for new players
 
 Outputs (in docs/):
     - index.html              main leaderboard (served by GitHub Pages)
@@ -240,13 +243,59 @@ def calc_recent_stats(pid, player_data):
     }
 
 
-def fetch_player(pid, rate, session, cache):
-    if pid in cache:
+def fetch_player(pid, rate, session, cache, force=False):
+    if pid in cache and not force:
         return cache[pid]
     player = get_player(pid, rate, session)
     ranked = get_ranked(pid, rate, session)
     cache[pid] = {"player": player, "ranked": ranked}
     return cache[pid]
+
+
+def discover_bfs(initial_queue, cache, rate, session, max_discovery,
+                 deep_search, seen_matches=None):
+    """BFS-discover new eligible IDs, walking each queued player's match history.
+
+    Match-level dedup via `seen_matches` ensures each match is scanned once even
+    if multiple sources played it. Returns newly-discovered IDs in discovery order.
+    """
+    match_filter = is_oce_season3_match if deep_search else is_qualifying_match
+    visited = set(cache.keys())
+    queue = deque(initial_queue)
+    if seen_matches is None:
+        seen_matches = set()
+    new_ids = []
+
+    while queue and len(new_ids) < max_discovery:
+        pid = queue.popleft()
+        player_data = cache.get(pid, {}).get("player")
+        if not player_data:
+            continue
+
+        for match in player_data.get("match_history", []) or []:
+            if not match_filter(match):
+                continue
+            match_id = match.get("id") or match.get("match_id")
+            if match_id is not None:
+                if match_id in seen_matches:
+                    continue
+                seen_matches.add(match_id)
+            for new_id in extract_match_player_ids(match):
+                if new_id in visited or not new_id.isdigit():
+                    continue
+                visited.add(new_id)
+                data = fetch_player(new_id, rate, session, cache)
+                if not is_eligible(data.get("player"), data.get("ranked")):
+                    continue
+                new_ids.append(new_id)
+                uname = (data.get("player") or {}).get("username", "?")
+                print(f"[discover {len(new_ids)}] id={new_id} ({uname})")
+                queue.append(new_id)
+                if len(new_ids) >= max_discovery:
+                    break
+            if len(new_ids) >= max_discovery:
+                break
+    return new_ids
 
 
 # ---- HTML output ----
@@ -932,76 +981,14 @@ def save_known_ids(players_path, ids):
     atomic_write_json(players_path, deduped, indent=2)
 
 
-def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY,
-        resume=False, deep_search=False, delay=DELAY_SECONDS):
+def build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir):
+    """Prune IDs, build leaderboard, write CSV/HTML/raw_data."""
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     raw_path = output_dir / "raw_data.json"
-    known_ids = load_known_ids(players_path, raw_path)
 
-    rate = RateTracker(delay=delay)
-    session = requests.Session()
-
-    cache = {}
-    if resume and raw_path.exists():
-        with open(raw_path) as f:
-            cache = json.load(f)
-        print(f"Resumed cache: {len(cache)} IDs already fetched\n")
-
-    # ---- Phase 1: fetch all known IDs ----
-    print(f"\n=== Phase 1: fetching {len(known_ids)} known IDs ===")
-    for i, pid in enumerate(known_ids, 1):
-        if pid in cache:
-            print(f"[{i}/{len(known_ids)}] id={pid} (cached)")
-            continue
-        print(f"[{i}/{len(known_ids)}] id={pid}")
-        fetch_player(pid, rate, session, cache)
-
-    # ---- Phase 2: BFS discovery ----
-    new_ids = []
-    if discover:
-        mode = "deep (all OCE S3 modes)" if deep_search else "standard (OCE casual S3)"
-        print(f"\n=== Phase 2: BFS discovery [{mode}] (cap: {max_discovery}) ===")
-        match_filter = is_oce_season3_match if deep_search else is_qualifying_match
-        visited = set(cache.keys())
-        queue = deque(known_ids)
-        seen_matches = set()
-
-        while queue and len(new_ids) < max_discovery:
-            pid = queue.popleft()
-            player_data = cache.get(pid, {}).get("player")
-            if not player_data:
-                continue
-
-            for match in player_data.get("match_history", []) or []:
-                if not match_filter(match):
-                    continue
-                match_id = match.get("id") or match.get("match_id")
-                if match_id is not None:
-                    if match_id in seen_matches:
-                        continue
-                    seen_matches.add(match_id)
-                for new_id in extract_match_player_ids(match):
-                    if new_id in visited or not new_id.isdigit():
-                        continue
-                    visited.add(new_id)
-                    data = fetch_player(new_id, rate, session, cache)
-                    if not is_eligible(data.get("player"), data.get("ranked")):
-                        continue
-                    new_ids.append(new_id)
-                    uname = (data.get("player") or {}).get("username", "?")
-                    print(f"[discover {len(new_ids)}] id={new_id} ({uname})")
-                    queue.append(new_id)
-                    if len(new_ids) >= max_discovery:
-                        break
-                if len(new_ids) >= max_discovery:
-                    break
-
-    # ---- Save updated ID list ----
     # Pruning rules:
-    #   * keep IDs whose ranked fetch failed (ranked is None) — retry next run, don't lose them
-    #   * prune IDs where ranked succeeded but matches_played < MIN_RANKED_MATCHES
+    #   * keep IDs whose fetch failed this run (ranked/player is None) — retry next run
+    #   * prune IDs where fetch succeeded but matches_played < MIN_RANKED_MATCHES
     #   * prune IDs that aren't OCE-majority (they pollute every future run otherwise)
     all_ids = list(dict.fromkeys(known_ids + new_ids))
     save_ids = []
@@ -1022,7 +1009,6 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         save_ids.append(pid)
     save_known_ids(players_path, save_ids)
 
-    # ---- Build leaderboard ----
     leaderboard = []
     for pid, data in cache.items():
         pd = data.get("player") or {}
@@ -1069,12 +1055,129 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     with open(output_dir / "index.html", "w", encoding="utf-8") as f:
         f.write(build_simple_html(leaderboard, last_updated))
 
+    pruned = len(all_ids) - len(save_ids)
     print(f"\nDone! Written to {output_dir}/")
     print(f"  index.html                main leaderboard")
     print(f"  leaderboard_detailed.html detailed leaderboard with stats")
     print(f"  full_leaderboard.csv     {len(leaderboard)} players")
-    pruned = len(all_ids) - len(save_ids)
     print(f"  players.json             {len(save_ids)} known IDs ({len(new_ids)} new, {pruned} pruned)")
+
+
+def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY,
+        resume=False, deep_search=False, delay=DELAY_SECONDS):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_path = output_dir / "raw_data.json"
+    known_ids = load_known_ids(players_path, raw_path)
+
+    rate = RateTracker(delay=delay)
+    session = requests.Session()
+
+    cache = {}
+    if resume and raw_path.exists():
+        with open(raw_path) as f:
+            cache = json.load(f)
+        print(f"Resumed cache: {len(cache)} IDs already fetched\n")
+
+    # ---- Phase 1: fetch all known IDs ----
+    print(f"\n=== Phase 1: fetching {len(known_ids)} known IDs ===")
+    for i, pid in enumerate(known_ids, 1):
+        if pid in cache:
+            print(f"[{i}/{len(known_ids)}] id={pid} (cached)")
+            continue
+        print(f"[{i}/{len(known_ids)}] id={pid}")
+        fetch_player(pid, rate, session, cache)
+
+    # ---- Phase 2: BFS discovery ----
+    new_ids = []
+    if discover:
+        mode = "deep (all OCE S3 modes)" if deep_search else "standard (OCE casual S3)"
+        print(f"\n=== Phase 2: BFS discovery [{mode}] (cap: {max_discovery}) ===")
+        new_ids = discover_bfs(known_ids, cache, rate, session, max_discovery, deep_search)
+
+    build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir)
+
+
+def run_quick(seed_id, players_path, output_dir, deep_search=False,
+              delay=DELAY_SECONDS, max_discovery=DEFAULT_MAX_DISCOVERY):
+    """Targeted refresh seeded from a single player ID.
+
+    Skips full Phase 1; force-refreshes the seed and everyone in the seed's
+    recent qualifying matches (so their ELOs are current); then BFS-walks
+    those participants' histories to discover any new players. Cheap update
+    after a session of games when only a handful of players' ratings moved.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = output_dir / "raw_data.json"
+
+    known_ids = load_known_ids(players_path, raw_path)
+
+    cache = {}
+    if raw_path.exists():
+        with open(raw_path) as f:
+            cache = json.load(f)
+        print(f"Loaded cache: {len(cache)} IDs\n")
+
+    rate = RateTracker(delay=delay)
+    session = requests.Session()
+
+    seed_id = str(seed_id)
+    print(f"=== Quick refresh seeded from id={seed_id} ===\n")
+
+    seed_data = fetch_player(seed_id, rate, session, cache, force=True)
+    if not seed_data.get("player"):
+        print(f"  ! couldn't fetch seed player {seed_id}, aborting")
+        return
+    seed_uname = (seed_data["player"] or {}).get("username", "?")
+    print(f"Seed: {seed_uname}\n")
+
+    match_filter = is_oce_season3_match if deep_search else is_qualifying_match
+    participants = set()
+    seen_matches = set()
+    for match in (seed_data["player"].get("match_history") or []):
+        if not match_filter(match):
+            continue
+        match_id = match.get("id") or match.get("match_id")
+        if match_id is not None:
+            seen_matches.add(match_id)
+        for pid in extract_match_player_ids(match):
+            if pid.isdigit():
+                participants.add(pid)
+    participants.discard(seed_id)
+
+    if not participants:
+        print(f"No qualifying matches in seed's history — nothing to refresh.\n"
+              f"(Try --deep-search if you want customs included.)")
+        build_and_write_outputs(cache, known_ids, [], players_path, output_dir)
+        return
+
+    print(f"Found {len(participants)} unique participants in seed's qualifying matches\n")
+
+    known_set = set(known_ids)
+    print(f"=== Refreshing participants ===")
+    for i, pid in enumerate(sorted(participants, key=int), 1):
+        tag = "(known)" if pid in known_set else "(NEW)"
+        print(f"[{i}/{len(participants)}] id={pid} {tag}")
+        fetch_player(pid, rate, session, cache, force=True)
+
+    print(f"\n=== BFS discovery from seed's matches (cap: {max_discovery}) ===")
+    bfs_new = discover_bfs(participants, cache, rate, session, max_discovery,
+                           deep_search, seen_matches=seen_matches)
+
+    # Anything we touched that isn't already known and is eligible should be saved.
+    new_ids = []
+    seen_pids = set()
+    for pid in [seed_id] + sorted(participants, key=int) + bfs_new:
+        if pid in known_set or pid in seen_pids:
+            continue
+        seen_pids.add(pid)
+        data = cache.get(pid, {})
+        if is_eligible(data.get("player"), data.get("ranked")):
+            new_ids.append(pid)
+
+    build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir)
 
 
 # ---- CLI ----
@@ -1095,11 +1198,21 @@ if __name__ == "__main__":
                         help="Load docs/raw_data.json and skip already-fetched IDs")
     parser.add_argument("--deep-search", action="store_true",
                         help="BFS follows all OCE S3 match types (not just casual) to find players in customs")
+    parser.add_argument("--quick", metavar="ID", default=None,
+                        help="Quick refresh: skip Phase 1; force-refresh seed ID + everyone in their "
+                             "recent qualifying matches; BFS-walk those histories for new players. "
+                             "Use this after a play session when only a few ratings have moved.")
     args = parser.parse_args()
 
-    run(args.players, args.output,
-        discover=not args.no_discover,
-        max_discovery=args.max_discovery,
-        resume=args.resume,
-        deep_search=args.deep_search,
-        delay=args.delay)
+    if args.quick:
+        run_quick(args.quick, args.players, args.output,
+                  deep_search=args.deep_search,
+                  delay=args.delay,
+                  max_discovery=args.max_discovery)
+    else:
+        run(args.players, args.output,
+            discover=not args.no_discover,
+            max_discovery=args.max_discovery,
+            resume=args.resume,
+            deep_search=args.deep_search,
+            delay=args.delay)
