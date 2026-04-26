@@ -755,7 +755,7 @@ const RANK_COLOR = {{
 const RANK_THRESHOLD = {{
   'Legend':2080,'Diamond':2000,
   'Platinum III':1900,'Platinum II':1820,'Platinum I':1740,
-  'Gold III':1660,'Gold II':1580,'Gold I':1500,
+  'Gold III':1660,'Gold II':1580,'Gold I':1490,
   'Silver III':1440,'Silver II':1380,'Silver I':1320,
   'Bronze III':1260,'Bronze II':1200,'Bronze I':1140,
 }};
@@ -775,7 +775,7 @@ const DIVIDER_TIERS = [
   {{ rank:'Platinum I',   threshold:1740 }},
   {{ rank:'Gold III',     threshold:1660 }},
   {{ rank:'Gold II',      threshold:1580 }},
-  {{ rank:'Gold I',       threshold:1500 }},
+  {{ rank:'Gold I',       threshold:1490 }},
   {{ rank:'Silver III',   threshold:1440 }},
   {{ rank:'Silver II',    threshold:1380 }},
   {{ rank:'Silver I',     threshold:1320 }},
