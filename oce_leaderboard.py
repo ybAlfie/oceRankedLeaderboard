@@ -53,13 +53,42 @@ HEADERS = {
     "Referer": "https://slapshot.gg/",
 }
 
+# Rank presentation — single source of truth, shared by Python row builders
+# and injected as JSON into the client-side renderers.
+RANK_IMG = {
+    'Legend':       'ranks/legend.png',
+    'Diamond':      'ranks/diamond.png',
+    'Platinum III': 'ranks/plat_iii.png', 'Platinum II': 'ranks/plat_ii.png', 'Platinum I': 'ranks/plat_i.png',
+    'Gold III':     'ranks/gold_iii.png', 'Gold II':     'ranks/gold_ii.png', 'Gold I':     'ranks/gold_i.png',
+    'Silver III':   'ranks/silver_iii.png','Silver II':  'ranks/silver_ii.png','Silver I':   'ranks/silver_i.png',
+    'Bronze III':   'ranks/bronze_iii.png','Bronze II':  'ranks/bronze_ii.png','Bronze I':   'ranks/bronze_i.png',
+    'Unranked':     'ranks/unranked.png',
+}
+RANK_COLOR = {
+    'Legend':       '#4fc3f7',
+    'Diamond':      '#4fc3f7',
+    'Platinum III': '#a78bfa', 'Platinum II': '#a78bfa', 'Platinum I': '#a78bfa',
+    'Gold III':     '#f5b731', 'Gold II':     '#f5b731', 'Gold I':     '#f5b731',
+    'Silver III':   '#a8bdd0', 'Silver II':   '#a8bdd0', 'Silver I':   '#a8bdd0',
+    'Bronze III':   '#cd7f32', 'Bronze II':   '#cd7f32', 'Bronze I':   '#cd7f32',
+    'Unranked':     '#7a8da6',
+}
+RANK_THRESHOLD = {
+    'Legend': 2080, 'Diamond': 2000,
+    'Platinum III': 1900, 'Platinum II': 1820, 'Platinum I': 1740,
+    'Gold III': 1660, 'Gold II': 1580, 'Gold I': 1490,
+    'Silver III': 1440, 'Silver II': 1380, 'Silver I': 1320,
+    'Bronze III': 1260, 'Bronze II': 1200, 'Bronze I': 1140,
+}
+
 
 # ---- HTTP with rate limit awareness ----
 
 class RateTracker:
-    def __init__(self):
+    def __init__(self, delay=DELAY_SECONDS):
         self.remaining = None
         self.reset_at = None
+        self.delay = delay
 
     def update(self, resp):
         if "x-ratelimit-remaining" in resp.headers:
@@ -77,35 +106,40 @@ class RateTracker:
                 time.sleep(wait)
 
 
-def fetch_json(url, rate, session):
-    rate.wait_if_needed()
-    time.sleep(DELAY_SECONDS)
+def fetch_json(url, rate, session, max_429_retries=3):
+    for attempt in range(max_429_retries + 1):
+        rate.wait_if_needed()
+        time.sleep(rate.delay)
 
-    try:
-        resp = session.get(url, headers=HEADERS, timeout=30)
-    except requests.RequestException as e:
-        print(f"   ! network error on {url}: {e}")
-        return None
+        try:
+            resp = session.get(url, headers=HEADERS, timeout=30)
+        except requests.RequestException as e:
+            print(f"   ! network error on {url}: {e}")
+            return None
 
-    rate.update(resp)
+        rate.update(resp)
 
-    if resp.status_code == 429:
-        print("   ! 429 Too Many Requests, backing off 60s")
-        time.sleep(60)
-        return fetch_json(url, rate, session)
+        if resp.status_code == 429:
+            if attempt >= max_429_retries:
+                print(f"   ! 429 after {attempt} retries, giving up on {url}")
+                return None
+            print(f"   ! 429 Too Many Requests, backing off 60s (attempt {attempt + 1})")
+            time.sleep(60)
+            continue
 
-    if resp.status_code in (404, 403):
-        return None
+        if resp.status_code in (404, 403):
+            return None
 
-    if resp.status_code >= 400:
-        print(f"   ! HTTP {resp.status_code} on {url}")
-        return None
+        if resp.status_code >= 400:
+            print(f"   ! HTTP {resp.status_code} on {url}")
+            return None
 
-    try:
-        return resp.json()
-    except ValueError:
-        print(f"   ! non-JSON response from {url}")
-        return None
+        try:
+            return resp.json()
+        except ValueError:
+            print(f"   ! non-JSON response from {url}")
+            return None
+    return None
 
 
 def get_player(pid, rate, session):
@@ -164,8 +198,17 @@ def is_oce_majority(player_data):
     return oce >= non_oce
 
 
+def is_eligible(player_data, ranked_data):
+    """Single source of truth for leaderboard eligibility."""
+    if ((ranked_data or {}).get("matches_played") or 0) < MIN_RANKED_MATCHES:
+        return False
+    if not is_oce_majority(player_data):
+        return False
+    return True
+
+
 def calc_recent_stats(pid, player_data):
-    """Win rate and goals/game from the last 10 OCE casual matches in history."""
+    """Wins, losses, win rate and goals/game from the last 10 OCE ranked matches in history."""
     wins = goals = games = 0
     for m in (player_data or {}).get("match_history", []) or []:
         if games >= 10:
@@ -182,12 +225,18 @@ def calc_recent_stats(pid, player_data):
         games += 1
         wins  += stats.get("wins", 0)
         goals += stats.get("goals", 0)
+    losses = games - wins
     if games == 0:
-        return {"win_rate": None, "goals_per_game": None, "recent_games": 0}
+        return {
+            "win_rate": None, "goals_per_game": None,
+            "recent_games": 0, "wins": 0, "losses": 0,
+        }
     return {
         "win_rate":      round(wins / games * 100),
         "goals_per_game": round(goals / games, 1),
         "recent_games":  games,
+        "wins":          wins,
+        "losses":        losses,
     }
 
 
@@ -202,7 +251,7 @@ def fetch_player(pid, rate, session, cache):
 
 # ---- HTML output ----
 
-def build_html(players):
+def build_html(players, last_updated=None):
     data_json = json.dumps([
         {
             "pos": i + 1,
@@ -215,10 +264,16 @@ def build_html(players):
             "win_rate": p.get("win_rate") if p.get("win_rate") is not None else "",
             "goals_per_game": p.get("goals_per_game") if p.get("goals_per_game") is not None else "",
             "recent_games": p.get("recent_games") or 0,
+            "wins": p.get("wins") or 0,
+            "losses": p.get("losses") or 0,
             "id": p["id"],
         }
         for i, p in enumerate(players)
     ], ensure_ascii=False)
+    last_updated_html = (
+        f'<p class="subtitle" style="margin-top:2px;">Last updated: {last_updated}</p>'
+        if last_updated else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -277,10 +332,12 @@ def build_html(players):
 <body>
 <h1>OCE Slapshot Leaderboard</h1>
 <p class="subtitle">Season 3 &mdash; oce-east</p>
+{last_updated_html}
 <div class="controls">
   <input class="search" type="text" placeholder="Search name..." id="search">
   <button class="toggle" id="toggleZero">Hide 0 matches</button>
   <button class="toggle" id="toggleUnranked">Hide unranked</button>
+  <button class="toggle" id="toggleRanked">Hide ranked</button>
   <span class="count" id="count"></span>
 </div>
 <table>
@@ -294,6 +351,7 @@ def build_html(players):
       <th data-col="highest_rank">Highest Rank<span class="arrow">&#8597;</span></th>
       <th data-col="highest_rating">Highest Rating<span class="arrow">&#8597;</span></th>
       <th data-col="win_rate">Win % (L10)<span class="arrow">&#8597;</span></th>
+      <th data-col="recent_games">W-L (L10)<span class="arrow">&#8597;</span></th>
       <th data-col="goals_per_game">Goals/G (L10)<span class="arrow">&#8597;</span></th>
     </tr>
   </thead>
@@ -331,12 +389,13 @@ const rankVal = r => {{ const i = RANK_ORDER.indexOf(r); return i === -1 ? 99 : 
 const ALL = {data_json};
 
 let sortCol = 'rating', sortAsc = false;
-let hideZero = false, hideUnranked = false, searchTerm = '';
+let hideZero = false, hideUnranked = false, hideRanked = false, searchTerm = '';
 
 function filtered() {{
   return ALL.filter(p => {{
     if (hideZero && p.matches === 0) return false;
     if (hideUnranked && (p.rank === 'Unranked' || p.rank === '')) return false;
+    if (hideRanked && p.rank !== 'Unranked' && p.rank !== '') return false;
     if (searchTerm && !p.name.toLowerCase().includes(searchTerm)) return false;
     return true;
   }});
@@ -347,8 +406,8 @@ function sorted(rows) {{
     let av = a[sortCol], bv = b[sortCol];
     if (sortCol === 'rank' || sortCol === 'highest_rank') {{
       av = rankVal(av); bv = rankVal(bv);
-    }} else if (typeof av === 'string') {{
-      av = av.toLowerCase(); bv = bv.toLowerCase();
+    }} else if (typeof av === 'string' || typeof bv === 'string') {{
+      av = String(av).toLowerCase(); bv = String(bv).toLowerCase();
     }}
     if (av === '' || av === null) av = sortAsc ? Infinity : -Infinity;
     if (bv === '' || bv === null) bv = sortAsc ? Infinity : -Infinity;
@@ -370,6 +429,7 @@ function render() {{
       <td>${{p.highest_rank ? rankBadge(p.highest_rank) : '—'}}</td>
       <td class="num">${{p.highest_rating}}</td>
       <td class="num">${{p.win_rate !== '' ? p.win_rate + '%' : '—'}}</td>
+      <td class="num">${{p.recent_games > 0 ? p.wins + '-' + p.losses : '—'}}</td>
       <td class="num">${{p.goals_per_game !== '' ? p.goals_per_game : '—'}}</td>
     </tr>`).join('');
 }}
@@ -393,7 +453,22 @@ document.getElementById('toggleZero').addEventListener('click', function() {{
   hideZero = !hideZero; this.classList.toggle('active', hideZero); render();
 }});
 document.getElementById('toggleUnranked').addEventListener('click', function() {{
-  hideUnranked = !hideUnranked; this.classList.toggle('active', hideUnranked); render();
+  hideUnranked = !hideUnranked;
+  if (hideUnranked && hideRanked) {{
+    hideRanked = false;
+    document.getElementById('toggleRanked').classList.remove('active');
+  }}
+  this.classList.toggle('active', hideUnranked);
+  render();
+}});
+document.getElementById('toggleRanked').addEventListener('click', function() {{
+  hideRanked = !hideRanked;
+  if (hideRanked && hideUnranked) {{
+    hideUnranked = false;
+    document.getElementById('toggleUnranked').classList.remove('active');
+  }}
+  this.classList.toggle('active', hideRanked);
+  render();
 }});
 document.getElementById('search').addEventListener('input', function() {{
   searchTerm = this.value.toLowerCase(); render();
@@ -406,25 +481,6 @@ render();
 
 
 def build_simple_html(players, last_updated=None):
-    RANK_IMG = {
-        'Platinum III': 'ranks/plat_iii.png', 'Platinum II': 'ranks/plat_ii.png',
-        'Platinum I':   'ranks/plat_i.png',
-        'Gold III':     'ranks/gold_iii.png',  'Gold II':  'ranks/gold_ii.png',
-        'Gold I':       'ranks/gold_i.png',
-        'Silver III':   'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png',
-        'Silver I':     'ranks/silver_i.png',
-        'Bronze III':   'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png',
-        'Bronze I':     'ranks/bronze_i.png',
-        'Unranked':     'ranks/unranked.png',
-    }
-    RANK_COLOR = {
-        'Platinum III': '#a78bfa', 'Platinum II': '#a78bfa', 'Platinum I': '#a78bfa',
-        'Gold III':     '#f5b731', 'Gold II':     '#f5b731', 'Gold I':     '#f5b731',
-        'Silver III':   '#a8bdd0', 'Silver II':   '#a8bdd0', 'Silver I':   '#a8bdd0',
-        'Bronze III':   '#cd7f32', 'Bronze II':   '#cd7f32', 'Bronze I':   '#cd7f32',
-        'Unranked':     '#7a8da6',
-    }
-
     PODIUM_CLASS = {1: "top-1", 2: "top-2", 3: "top-3"}
 
     rows = []
@@ -448,6 +504,9 @@ def build_simple_html(players, last_updated=None):
   </tr>""")
 
     rows_html = "\n".join(rows)
+    rank_img_json = json.dumps(RANK_IMG, ensure_ascii=False)
+    rank_color_json = json.dumps(RANK_COLOR, ensure_ascii=False)
+    rank_threshold_json = json.dumps(RANK_THRESHOLD, ensure_ascii=False)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -726,39 +785,9 @@ def build_simple_html(players, last_updated=None):
   </table>
 </div>
 <script>
-const RANK_ORDER = [
-  'Legend','Diamond',
-  'Platinum III','Platinum II','Platinum I',
-  'Gold III','Gold II','Gold I',
-  'Silver III','Silver II','Silver I',
-  'Bronze III','Bronze II','Bronze I',
-  'Unranked',''
-];
-const RANK_IMG = {{
-  'Legend':      'ranks/legend.png',
-  'Diamond':     'ranks/diamond.png',
-  'Platinum III':'ranks/plat_iii.png','Platinum II':'ranks/plat_ii.png','Platinum I':'ranks/plat_i.png',
-  'Gold III':    'ranks/gold_iii.png','Gold II':'ranks/gold_ii.png','Gold I':'ranks/gold_i.png',
-  'Silver III':  'ranks/silver_iii.png','Silver II':'ranks/silver_ii.png','Silver I':'ranks/silver_i.png',
-  'Bronze III':  'ranks/bronze_iii.png','Bronze II':'ranks/bronze_ii.png','Bronze I':'ranks/bronze_i.png',
-  'Unranked':    'ranks/unranked.png',
-}};
-const RANK_COLOR = {{
-  'Legend':      '#4fc3f7',
-  'Diamond':     '#4fc3f7',
-  'Platinum III':'#a78bfa','Platinum II':'#a78bfa','Platinum I':'#a78bfa',
-  'Gold III':    '#f5b731','Gold II':'#f5b731','Gold I':'#f5b731',
-  'Silver III':  '#a8bdd0','Silver II':'#a8bdd0','Silver I':'#a8bdd0',
-  'Bronze III':  '#cd7f32','Bronze II':'#cd7f32','Bronze I':'#cd7f32',
-  'Unranked':    '#7a8da6',
-}};
-const RANK_THRESHOLD = {{
-  'Legend':2080,'Diamond':2000,
-  'Platinum III':1900,'Platinum II':1820,'Platinum I':1740,
-  'Gold III':1660,'Gold II':1580,'Gold I':1490,
-  'Silver III':1440,'Silver II':1380,'Silver I':1320,
-  'Bronze III':1260,'Bronze II':1200,'Bronze I':1140,
-}};
+const RANK_IMG = {rank_img_json};
+const RANK_COLOR = {rank_color_json};
+const RANK_THRESHOLD = {rank_threshold_json};
 const PODIUM = ['top-1','top-2','top-3'];
 
 const rankCellHtml = r => {{
@@ -767,22 +796,9 @@ const rankCellHtml = r => {{
   return `${{img}}<span style="color:${{color}}">${{r || 'Unranked'}}</span>`;
 }};
 
-const DIVIDER_TIERS = [
-  {{ rank:'Legend',       threshold:2080 }},
-  {{ rank:'Diamond',      threshold:2000 }},
-  {{ rank:'Platinum III', threshold:1900 }},
-  {{ rank:'Platinum II',  threshold:1820 }},
-  {{ rank:'Platinum I',   threshold:1740 }},
-  {{ rank:'Gold III',     threshold:1660 }},
-  {{ rank:'Gold II',      threshold:1580 }},
-  {{ rank:'Gold I',       threshold:1490 }},
-  {{ rank:'Silver III',   threshold:1440 }},
-  {{ rank:'Silver II',    threshold:1380 }},
-  {{ rank:'Silver I',     threshold:1320 }},
-  {{ rank:'Bronze III',   threshold:1260 }},
-  {{ rank:'Bronze II',    threshold:1200 }},
-  {{ rank:'Bronze I',     threshold:1140 }},
-];
+const DIVIDER_TIERS = Object.entries(RANK_THRESHOLD)
+  .map(([rank, threshold]) => ({{ rank, threshold }}))
+  .sort((a, b) => b.threshold - a.threshold);
 
 const makeDivider = (rank, isEmpty) => {{
   const tr = document.createElement('tr');
@@ -898,20 +914,33 @@ def load_known_ids(players_path, raw_path):
     return []
 
 
+def _id_sort_key(x):
+    s = str(x)
+    return (0, int(s)) if s.isdigit() else (1, s)
+
+
+def atomic_write_json(path, data, indent=None):
+    """Write JSON to a temp file then replace the target — survives Ctrl-C mid-write."""
+    p = Path(path)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=indent), encoding="utf-8")
+    tmp.replace(p)
+
+
 def save_known_ids(players_path, ids):
-    Path(players_path).write_text(
-        json.dumps(sorted(ids, key=int), indent=2), encoding="utf-8"
-    )
+    deduped = sorted({str(i) for i in ids}, key=_id_sort_key)
+    atomic_write_json(players_path, deduped, indent=2)
 
 
-def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY, resume=False, deep_search=False):
+def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY,
+        resume=False, deep_search=False, delay=DELAY_SECONDS):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     raw_path = output_dir / "raw_data.json"
     known_ids = load_known_ids(players_path, raw_path)
 
-    rate = RateTracker()
+    rate = RateTracker(delay=delay)
     session = requests.Session()
 
     cache = {}
@@ -937,6 +966,7 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         match_filter = is_oce_season3_match if deep_search else is_qualifying_match
         visited = set(cache.keys())
         queue = deque(known_ids)
+        seen_matches = set()
 
         while queue and len(new_ids) < max_discovery:
             pid = queue.popleft()
@@ -947,19 +977,21 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
             for match in player_data.get("match_history", []) or []:
                 if not match_filter(match):
                     continue
+                match_id = match.get("id") or match.get("match_id")
+                if match_id is not None:
+                    if match_id in seen_matches:
+                        continue
+                    seen_matches.add(match_id)
                 for new_id in extract_match_player_ids(match):
                     if new_id in visited or not new_id.isdigit():
                         continue
                     visited.add(new_id)
                     data = fetch_player(new_id, rate, session, cache)
-                    pd = (data.get("player") or {})
-                    rd = (data.get("ranked") or {})
-                    if (rd.get("matches_played") or 0) < MIN_RANKED_MATCHES:
-                        continue
-                    if not is_oce_majority(pd):
+                    if not is_eligible(data.get("player"), data.get("ranked")):
                         continue
                     new_ids.append(new_id)
-                    print(f"[discover {len(new_ids)}] id={new_id} ({pd.get('username', '?')})")
+                    uname = (data.get("player") or {}).get("username", "?")
+                    print(f"[discover {len(new_ids)}] id={new_id} ({uname})")
                     queue.append(new_id)
                     if len(new_ids) >= max_discovery:
                         break
@@ -967,13 +999,27 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
                     break
 
     # ---- Save updated ID list ----
+    # Pruning rules:
+    #   * keep IDs whose ranked fetch failed (ranked is None) — retry next run, don't lose them
+    #   * prune IDs where ranked succeeded but matches_played < MIN_RANKED_MATCHES
+    #   * prune IDs that aren't OCE-majority (they pollute every future run otherwise)
     all_ids = list(dict.fromkeys(known_ids + new_ids))
-    # Prune players who have never played a ranked match — they'll never appear on
-    # the leaderboard and would waste fetch time on every future run.
-    save_ids = [
-        pid for pid in all_ids
-        if ((cache.get(pid, {}).get("ranked") or {}).get("matches_played") or 0) >= MIN_RANKED_MATCHES
-    ]
+    save_ids = []
+    for pid in all_ids:
+        cached = cache.get(pid)
+        if not cached:
+            save_ids.append(pid)
+            continue
+        ranked = cached.get("ranked")
+        player = cached.get("player")
+        if ranked is None or player is None:
+            save_ids.append(pid)
+            continue
+        if (ranked.get("matches_played") or 0) < MIN_RANKED_MATCHES:
+            continue
+        if not is_oce_majority(player):
+            continue
+        save_ids.append(pid)
     save_known_ids(players_path, save_ids)
 
     # ---- Build leaderboard ----
@@ -984,9 +1030,7 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         uname = (pd.get("username") or "").strip()
         if not uname:
             continue
-        if (r.get("matches_played") or 0) < MIN_RANKED_MATCHES:
-            continue
-        if not is_oce_majority(pd):
+        if not is_eligible(pd, r):
             continue
         recent = calc_recent_stats(pid, pd)
         leaderboard.append({
@@ -1000,6 +1044,8 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
             "win_rate": recent["win_rate"],
             "goals_per_game": recent["goals_per_game"],
             "recent_games": recent["recent_games"],
+            "wins": recent["wins"],
+            "losses": recent["losses"],
         })
     leaderboard.sort(key=lambda x: (x["rating"] is None, -(x["rating"] or 0)))
 
@@ -1012,15 +1058,15 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
         for i, p in enumerate(leaderboard, 1):
             w.writerow({"position": i, **p})
 
-    with open(raw_path, "w") as f:
-        json.dump(cache, f, indent=2)
+    atomic_write_json(raw_path, cache, indent=2)
+
+    mtime = datetime.fromtimestamp(raw_path.stat().st_mtime)
+    last_updated = f"{mtime.day} {mtime.strftime('%B %Y %H:%M')}"
 
     with open(output_dir / "leaderboard_detailed.html", "w", encoding="utf-8") as f:
-        f.write(build_html(leaderboard))
+        f.write(build_html(leaderboard, last_updated))
 
     with open(output_dir / "index.html", "w", encoding="utf-8") as f:
-        mtime = datetime.fromtimestamp(raw_path.stat().st_mtime)
-        last_updated = f"{mtime.day} {mtime.strftime('%B %Y %H:%M')}"
         f.write(build_simple_html(leaderboard, last_updated))
 
     print(f"\nDone! Written to {output_dir}/")
@@ -1051,9 +1097,9 @@ if __name__ == "__main__":
                         help="BFS follows all OCE S3 match types (not just casual) to find players in customs")
     args = parser.parse_args()
 
-    DELAY_SECONDS = args.delay
     run(args.players, args.output,
         discover=not args.no_discover,
         max_discovery=args.max_discovery,
         resume=args.resume,
-        deep_search=args.deep_search)
+        deep_search=args.deep_search,
+        delay=args.delay)
