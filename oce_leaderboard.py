@@ -15,6 +15,9 @@ Usage:
     python oce_leaderboard.py --quick 440        # cheap update: refresh seed (id=440) +
                                                  # everyone in their recent matches, then
                                                  # BFS one+ level for new players
+    python oce_leaderboard.py --import-ids ids.txt  # merge IDs scraped from a text file
+                                                 # into players.json (run a normal update
+                                                 # afterwards to fetch + verify them)
 
 Outputs (in docs/):
     - index.html              main leaderboard (served by GitHub Pages)
@@ -981,6 +984,45 @@ def save_known_ids(players_path, ids):
     atomic_write_json(players_path, deduped, indent=2)
 
 
+def import_ids_from_file(text_path, players_path):
+    """Extract every unique numeric ID from a messy text file and merge into players.json.
+
+    Tolerates `ID\\tName`, `ID Name`, comma-thousands (`116,462`), and skips junk
+    rows (`-`, `?`, `0`, `-------`, `REPLAQ`, blanks). The first whitespace-
+    delimited token on each line is treated as the candidate ID.
+    """
+    text = Path(text_path).read_text(encoding="utf-8")
+    extracted = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        token = line.split(None, 1)[0]
+        digits = token.replace(",", "")
+        if digits.isdigit() and int(digits) > 0:
+            extracted.add(digits)
+
+    existing = set()
+    p = Path(players_path)
+    if p.exists():
+        existing = {str(i) for i in json.loads(p.read_text(encoding="utf-8"))}
+
+    new = extracted - existing
+    merged = existing | extracted
+    save_known_ids(players_path, merged)
+
+    print(f"Imported from {text_path}")
+    print(f"  parsed:    {len(extracted)} unique IDs")
+    print(f"  existing:  {len(existing)} already in {players_path}")
+    print(f"  new:       {len(new)} added")
+    print(f"  total:     {len(merged)} known IDs after merge")
+    if new:
+        sample = sorted(new, key=int)[:10]
+        more = f" ... (+{len(new) - len(sample)} more)" if len(new) > len(sample) else ""
+        print(f"  sample new IDs: {', '.join(sample)}{more}")
+    print(f"\nNext: run `python oce_leaderboard.py --no-discover` to fetch + verify them.")
+
+
 def build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir):
     """Prune IDs, build leaderboard, write CSV/HTML/raw_data."""
     output_dir = Path(output_dir)
@@ -1202,7 +1244,15 @@ if __name__ == "__main__":
                         help="Quick refresh: skip Phase 1; force-refresh seed ID + everyone in their "
                              "recent qualifying matches; BFS-walk those histories for new players. "
                              "Use this after a play session when only a few ratings have moved.")
+    parser.add_argument("--import-ids", metavar="FILE", default=None,
+                        help="Parse a messy text file for numeric player IDs and merge them into "
+                             "players.json. Skips non-numeric tokens, strips comma-thousands. "
+                             "Run a normal update afterwards to fetch + verify.")
     args = parser.parse_args()
+
+    if args.import_ids:
+        import_ids_from_file(args.import_ids, args.players)
+        raise SystemExit(0)
 
     if args.quick:
         run_quick(args.quick, args.players, args.output,
