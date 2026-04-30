@@ -984,6 +984,58 @@ def save_known_ids(players_path, ids):
     atomic_write_json(players_path, deduped, indent=2)
 
 
+def show_stats(output_dir, starting_rating=1400):
+    """Print ELO pool stats for eligible OCE players in the cache."""
+    raw_path = Path(output_dir) / "raw_data.json"
+    if not raw_path.exists():
+        print(f"No raw_data.json at {raw_path} — run the script first.")
+        return
+
+    with open(raw_path, encoding="utf-8") as f:
+        cache = json.load(f)
+
+    ratings = []
+    for data in cache.values():
+        pd = data.get("player") or {}
+        rd = data.get("ranked") or {}
+        if not is_eligible(pd, rd):
+            continue
+        rating = rd.get("rating")
+        if rating is not None:
+            ratings.append(rating)
+
+    if not ratings:
+        print("No eligible rated players in cache.")
+        return
+
+    n = len(ratings)
+    total = sum(ratings)
+    mean = total / n
+    expected = n * starting_rating
+    deviation = total - expected
+    ratings_sorted = sorted(ratings)
+    median = ratings_sorted[n // 2] if n % 2 else (ratings_sorted[n // 2 - 1] + ratings_sorted[n // 2]) / 2
+
+    print(f"\n=== ELO pool stats (eligible OCE players) ===")
+    print(f"  Players:            {n}")
+    print(f"  Total ELO:          {total:,}")
+    print(f"  Mean / Median:      {mean:.1f} / {median}")
+    print(f"  Min / Max:          {min(ratings)} / {max(ratings)}")
+    print(f"\n  Starting rating:    {starting_rating}")
+    print(f"  Expected pool:      {expected:,}  (n * {starting_rating})")
+    print(f"  Deviation:          {deviation:+,}  (actual - expected)")
+
+    if deviation > 0:
+        print(f"\n  -> {deviation:,} ELO net imported into OCE pool")
+        print(f"     (overseas players losing on OCE server donate ELO in)")
+    elif deviation < 0:
+        print(f"\n  -> {-deviation:,} ELO net missing from OCE pool")
+        print(f"     (could be: overseas players winning + leaving with ELO,")
+        print(f"      OCE players we haven't discovered, or system decay)")
+    else:
+        print(f"\n  -> pool perfectly balanced (vanishingly unlikely, double-check inputs)")
+
+
 def import_ids_from_file(text_path, players_path):
     """Extract every unique numeric ID from a messy text file and merge into players.json.
 
@@ -1248,7 +1300,13 @@ if __name__ == "__main__":
                         help="Parse a messy text file for numeric player IDs and merge them into "
                              "players.json. Skips non-numeric tokens, strips comma-thousands. "
                              "Run a normal update afterwards to fetch + verify.")
+    parser.add_argument("--stats", action="store_true",
+                        help="Print ELO pool stats from cache and exit (no fetching).")
     args = parser.parse_args()
+
+    if args.stats:
+        show_stats(args.output)
+        raise SystemExit(0)
 
     if args.import_ids:
         import_ids_from_file(args.import_ids, args.players)
