@@ -81,7 +81,7 @@ RANK_COLOR = {
 }
 RANK_THRESHOLD = {
     'Legend': 2080, 'Diamond': 2000,
-    'Platinum III': 1900, 'Platinum II': 1820, 'Platinum I': 1740,
+    'Platinum III': 1920, 'Platinum II': 1820, 'Platinum I': 1740,
     'Gold III': 1660, 'Gold II': 1580, 'Gold I': 1490,
     'Silver III': 1440, 'Silver II': 1380, 'Silver I': 1320,
     'Bronze III': 1260, 'Bronze II': 1200, 'Bronze I': 1140,
