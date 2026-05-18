@@ -256,15 +256,19 @@ def fetch_player(pid, rate, session, cache, force=False):
 
 
 def discover_bfs(initial_queue, cache, rate, session, max_discovery,
-                 deep_search, seen_matches=None):
+                 deep_search, seen_matches=None, blocklist=None):
     """BFS-discover new eligible IDs, walking each queued player's match history.
 
     Match-level dedup via `seen_matches` ensures each match is scanned once even
-    if multiple sources played it. Returns newly-discovered IDs in discovery order.
+    if multiple sources played it. IDs in `blocklist` are never fetched or queued
+    (use for manually-excluded overseas players who slip past the OCE-majority rule).
+    Returns newly-discovered IDs in discovery order.
     """
     match_filter = is_oce_season3_match if deep_search else is_qualifying_match
-    visited = set(cache.keys())
-    queue = deque(initial_queue)
+    if blocklist is None:
+        blocklist = set()
+    visited = set(cache.keys()) | blocklist
+    queue = deque(pid for pid in initial_queue if pid not in blocklist)
     if seen_matches is None:
         seen_matches = set()
     new_ids = []
@@ -984,6 +988,23 @@ def save_known_ids(players_path, ids):
     atomic_write_json(players_path, deduped, indent=2)
 
 
+def load_blocklist(blocklist_path):
+    """Load manually-excluded IDs that should never appear on the leaderboard."""
+    p = Path(blocklist_path)
+    if not p.exists():
+        return set()
+    try:
+        return {str(i) for i in json.loads(p.read_text(encoding="utf-8"))}
+    except (ValueError, json.JSONDecodeError):
+        print(f"Warning: couldn't parse {blocklist_path}, treating as empty.")
+        return set()
+
+
+def save_blocklist(blocklist_path, ids):
+    deduped = sorted({str(i) for i in ids}, key=_id_sort_key)
+    atomic_write_json(blocklist_path, deduped, indent=2)
+
+
 def show_stats(output_dir, starting_rating=1400):
     """Print ELO pool stats for eligible OCE players in the cache."""
     raw_path = Path(output_dir) / "raw_data.json"
@@ -1075,16 +1096,20 @@ def import_ids_from_file(text_path, players_path):
     print(f"\nNext: run `python oce_leaderboard.py --no-discover` to fetch + verify them.")
 
 
-def build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir):
+def build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir,
+                            blocklist=None):
     """Prune IDs, build leaderboard, write CSV/HTML/raw_data."""
     output_dir = Path(output_dir)
     raw_path = output_dir / "raw_data.json"
+    if blocklist is None:
+        blocklist = set()
 
     # Pruning rules:
+    #   * blocked IDs never reach players.json
     #   * keep IDs whose fetch failed this run (ranked/player is None) — retry next run
     #   * prune IDs where fetch succeeded but matches_played < MIN_RANKED_MATCHES
     #   * prune IDs that aren't OCE-majority (they pollute every future run otherwise)
-    all_ids = list(dict.fromkeys(known_ids + new_ids))
+    all_ids = [pid for pid in dict.fromkeys(known_ids + new_ids) if pid not in blocklist]
     save_ids = []
     for pid in all_ids:
         cached = cache.get(pid)
@@ -1105,6 +1130,8 @@ def build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir)
 
     leaderboard = []
     for pid, data in cache.items():
+        if pid in blocklist:
+            continue
         pd = data.get("player") or {}
         r = data.get("ranked") or {}
         uname = (pd.get("username") or "").strip()
@@ -1157,13 +1184,70 @@ def build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir)
     print(f"  players.json             {len(save_ids)} known IDs ({len(new_ids)} new, {pruned} pruned)")
 
 
+def block_id(pid, blocklist_path, players_path, output_dir):
+    """Add `pid` to the blocklist, remove from players.json + raw_data.json, rebuild outputs."""
+    pid = str(pid)
+    blocked = load_blocklist(blocklist_path)
+    if pid in blocked:
+        print(f"id={pid} already in {blocklist_path}")
+        return
+    blocked.add(pid)
+    save_blocklist(blocklist_path, blocked)
+    print(f"Added id={pid} to {blocklist_path}")
+
+    players_p = Path(players_path)
+    if players_p.exists():
+        existing = json.loads(players_p.read_text(encoding="utf-8"))
+        if pid in {str(i) for i in existing}:
+            save_known_ids(players_path, [i for i in existing if str(i) != pid])
+            print(f"Removed id={pid} from {players_path}")
+
+    raw_path = Path(output_dir) / "raw_data.json"
+    if not raw_path.exists():
+        print(f"No {raw_path} to clean. Done.")
+        return
+    with open(raw_path, encoding="utf-8") as f:
+        cache = json.load(f)
+    removed_from_cache = pid in cache
+    if removed_from_cache:
+        cached_player = (cache[pid].get("player") or {}).get("username", "?")
+        del cache[pid]
+        print(f"Removed id={pid} ({cached_player}) from {raw_path}; rebuilding outputs...")
+    else:
+        print(f"id={pid} was not in {raw_path}; rebuilding outputs to apply blocklist...")
+
+    known_after = json.loads(Path(players_path).read_text(encoding="utf-8")) \
+        if Path(players_path).exists() else []
+    build_and_write_outputs(cache, [str(i) for i in known_after], [],
+                            players_path, output_dir, blocklist=blocked)
+
+
+def unblock_id(pid, blocklist_path):
+    """Remove `pid` from the blocklist. Does not refetch — run a full update afterwards if needed."""
+    pid = str(pid)
+    blocked = load_blocklist(blocklist_path)
+    if pid not in blocked:
+        print(f"id={pid} not in {blocklist_path}")
+        return
+    blocked.discard(pid)
+    save_blocklist(blocklist_path, blocked)
+    print(f"Removed id={pid} from {blocklist_path}.")
+    print(f"Run `py oce_leaderboard.py` (or --quick) to re-fetch them if they should be on the board.")
+
+
 def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCOVERY,
-        resume=False, deep_search=False, delay=DELAY_SECONDS):
+        resume=False, deep_search=False, delay=DELAY_SECONDS, blocklist_path="blocked_ids.json"):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     raw_path = output_dir / "raw_data.json"
     known_ids = load_known_ids(players_path, raw_path)
+    blocklist = load_blocklist(blocklist_path)
+    if blocklist:
+        before = len(known_ids)
+        known_ids = [pid for pid in known_ids if pid not in blocklist]
+        if len(known_ids) < before:
+            print(f"Blocklist filtered {before - len(known_ids)} ID(s) from known list.")
 
     rate = RateTracker(delay=delay)
     session = requests.Session()
@@ -1172,6 +1256,8 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     if resume and raw_path.exists():
         with open(raw_path) as f:
             cache = json.load(f)
+        for pid in blocklist & set(cache.keys()):
+            del cache[pid]
         print(f"Resumed cache: {len(cache)} IDs already fetched\n")
 
     # ---- Phase 1: fetch all known IDs ----
@@ -1188,13 +1274,16 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
     if discover:
         mode = "deep (all OCE S3 modes)" if deep_search else "standard (OCE casual S3)"
         print(f"\n=== Phase 2: BFS discovery [{mode}] (cap: {max_discovery}) ===")
-        new_ids = discover_bfs(known_ids, cache, rate, session, max_discovery, deep_search)
+        new_ids = discover_bfs(known_ids, cache, rate, session, max_discovery,
+                               deep_search, blocklist=blocklist)
 
-    build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir)
+    build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir,
+                            blocklist=blocklist)
 
 
 def run_quick(seed_id, players_path, output_dir, deep_search=False,
-              delay=DELAY_SECONDS, max_discovery=DEFAULT_MAX_DISCOVERY):
+              delay=DELAY_SECONDS, max_discovery=DEFAULT_MAX_DISCOVERY,
+              blocklist_path="blocked_ids.json"):
     """Targeted refresh seeded from a single player ID.
 
     Skips full Phase 1; force-refreshes the seed and everyone in the seed's
@@ -1207,17 +1296,25 @@ def run_quick(seed_id, players_path, output_dir, deep_search=False,
     raw_path = output_dir / "raw_data.json"
 
     known_ids = load_known_ids(players_path, raw_path)
+    blocklist = load_blocklist(blocklist_path)
+    known_ids = [pid for pid in known_ids if pid not in blocklist]
+
+    seed_id = str(seed_id)
+    if seed_id in blocklist:
+        print(f"  ! seed id={seed_id} is in blocklist, aborting")
+        return
 
     cache = {}
     if raw_path.exists():
         with open(raw_path) as f:
             cache = json.load(f)
+        for pid in blocklist & set(cache.keys()):
+            del cache[pid]
         print(f"Loaded cache: {len(cache)} IDs\n")
 
     rate = RateTracker(delay=delay)
     session = requests.Session()
 
-    seed_id = str(seed_id)
     print(f"=== Quick refresh seeded from id={seed_id} ===\n")
 
     seed_data = fetch_player(seed_id, rate, session, cache, force=True)
@@ -1237,14 +1334,15 @@ def run_quick(seed_id, players_path, output_dir, deep_search=False,
         if match_id is not None:
             seen_matches.add(match_id)
         for pid in extract_match_player_ids(match):
-            if pid.isdigit():
+            if pid.isdigit() and pid not in blocklist:
                 participants.add(pid)
     participants.discard(seed_id)
 
     if not participants:
         print(f"No qualifying matches in seed's history — nothing to refresh.\n"
               f"(Try --deep-search if you want customs included.)")
-        build_and_write_outputs(cache, known_ids, [], players_path, output_dir)
+        build_and_write_outputs(cache, known_ids, [], players_path, output_dir,
+                                blocklist=blocklist)
         return
 
     print(f"Found {len(participants)} unique participants in seed's qualifying matches\n")
@@ -1258,20 +1356,21 @@ def run_quick(seed_id, players_path, output_dir, deep_search=False,
 
     print(f"\n=== BFS discovery from seed's matches (cap: {max_discovery}) ===")
     bfs_new = discover_bfs(participants, cache, rate, session, max_discovery,
-                           deep_search, seen_matches=seen_matches)
+                           deep_search, seen_matches=seen_matches, blocklist=blocklist)
 
     # Anything we touched that isn't already known and is eligible should be saved.
     new_ids = []
     seen_pids = set()
     for pid in [seed_id] + sorted(participants, key=int) + bfs_new:
-        if pid in known_set or pid in seen_pids:
+        if pid in known_set or pid in seen_pids or pid in blocklist:
             continue
         seen_pids.add(pid)
         data = cache.get(pid, {})
         if is_eligible(data.get("player"), data.get("ranked")):
             new_ids.append(pid)
 
-    build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir)
+    build_and_write_outputs(cache, known_ids, new_ids, players_path, output_dir,
+                            blocklist=blocklist)
 
 
 # ---- CLI ----
@@ -1302,6 +1401,15 @@ if __name__ == "__main__":
                              "Run a normal update afterwards to fetch + verify.")
     parser.add_argument("--stats", action="store_true",
                         help="Print ELO pool stats from cache and exit (no fetching).")
+    parser.add_argument("--blocklist", default="blocked_ids.json",
+                        help="Path to manually-excluded IDs (default: blocked_ids.json). "
+                             "These are filtered out of every run.")
+    parser.add_argument("--block", metavar="ID", default=None,
+                        help="Add ID to the blocklist, remove from players.json + raw_data.json, "
+                             "and rebuild outputs. Use for overseas players who slip past "
+                             "the OCE-majority rule.")
+    parser.add_argument("--unblock", metavar="ID", default=None,
+                        help="Remove ID from the blocklist.")
     args = parser.parse_args()
 
     if args.stats:
@@ -1312,15 +1420,25 @@ if __name__ == "__main__":
         import_ids_from_file(args.import_ids, args.players)
         raise SystemExit(0)
 
+    if args.block:
+        block_id(args.block, args.blocklist, args.players, args.output)
+        raise SystemExit(0)
+
+    if args.unblock:
+        unblock_id(args.unblock, args.blocklist)
+        raise SystemExit(0)
+
     if args.quick:
         run_quick(args.quick, args.players, args.output,
                   deep_search=args.deep_search,
                   delay=args.delay,
-                  max_discovery=args.max_discovery)
+                  max_discovery=args.max_discovery,
+                  blocklist_path=args.blocklist)
     else:
         run(args.players, args.output,
             discover=not args.no_discover,
             max_discovery=args.max_discovery,
             resume=args.resume,
             deep_search=args.deep_search,
-            delay=args.delay)
+            delay=args.delay,
+            blocklist_path=args.blocklist)
