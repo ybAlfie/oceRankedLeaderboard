@@ -256,28 +256,38 @@ def fetch_player(pid, rate, session, cache, force=False):
 
 
 def discover_bfs(initial_queue, cache, rate, session, max_discovery,
-                 deep_search, seen_matches=None, blocklist=None):
-    """BFS-discover new eligible IDs, walking each queued player's match history.
+                 deep_search, seen_matches=None, blocklist=None,
+                 refresh_known_through_depth=0):
+    """BFS-walk match histories from `initial_queue`.
 
-    Match-level dedup via `seen_matches` ensures each match is scanned once even
-    if multiple sources played it. IDs in `blocklist` are never fetched or queued
-    (use for manually-excluded overseas players who slip past the OCE-majority rule).
+    Always discovers + fetches new (uncached) eligible players.
+
+    `refresh_known_through_depth` (default 0): force-refresh known players
+    encountered up to this many hops from the initial queue. 0 = current
+    behaviour (skip known players). Higher values catch ELO drift in players
+    who weren't direct opponents but were one or more hops away.
+
+    IDs in `blocklist` are never fetched, refreshed, or queued.
+
     Returns newly-discovered IDs in discovery order.
     """
     match_filter = is_oce_season3_match if deep_search else is_qualifying_match
     if blocklist is None:
         blocklist = set()
-    visited = set(cache.keys()) | blocklist
-    queue = deque(pid for pid in initial_queue if pid not in blocklist)
     if seen_matches is None:
         seen_matches = set()
+
     new_ids = []
+    refreshed = set()
+    queued = set(pid for pid in initial_queue if pid not in blocklist)
+    queue = deque((pid, 0) for pid in queued)
 
     while queue and len(new_ids) < max_discovery:
-        pid = queue.popleft()
+        pid, depth = queue.popleft()
         player_data = cache.get(pid, {}).get("player")
         if not player_data:
             continue
+        child_depth = depth + 1
 
         for match in player_data.get("match_history", []) or []:
             if not match_filter(match):
@@ -287,17 +297,32 @@ def discover_bfs(initial_queue, cache, rate, session, max_discovery,
                 if match_id in seen_matches:
                     continue
                 seen_matches.add(match_id)
-            for new_id in extract_match_player_ids(match):
-                if new_id in visited or not new_id.isdigit():
+
+            for participant in extract_match_player_ids(match):
+                if (not participant.isdigit() or participant == pid
+                        or participant in blocklist):
                     continue
-                visited.add(new_id)
-                data = fetch_player(new_id, rate, session, cache)
-                if not is_eligible(data.get("player"), data.get("ranked")):
-                    continue
-                new_ids.append(new_id)
-                uname = (data.get("player") or {}).get("username", "?")
-                print(f"[discover {len(new_ids)}] id={new_id} ({uname})")
-                queue.append(new_id)
+
+                if participant not in cache:
+                    data = fetch_player(participant, rate, session, cache)
+                    if not is_eligible(data.get("player"), data.get("ranked")):
+                        continue
+                    new_ids.append(participant)
+                    uname = (data.get("player") or {}).get("username", "?")
+                    print(f"[discover {len(new_ids)}] id={participant} ({uname})")
+                    if participant not in queued:
+                        queue.append((participant, child_depth))
+                        queued.add(participant)
+                elif (child_depth <= refresh_known_through_depth
+                      and participant not in refreshed):
+                    refreshed.add(participant)
+                    fetch_player(participant, rate, session, cache, force=True)
+                    uname = (cache.get(participant, {}).get("player") or {}).get("username", "?")
+                    print(f"[refresh d={child_depth}] id={participant} ({uname})")
+                    if participant not in queued:
+                        queue.append((participant, child_depth))
+                        queued.add(participant)
+
                 if len(new_ids) >= max_discovery:
                     break
             if len(new_ids) >= max_discovery:
@@ -1283,13 +1308,19 @@ def run(players_path, output_dir, discover=True, max_discovery=DEFAULT_MAX_DISCO
 
 def run_quick(seed_id, players_path, output_dir, deep_search=False,
               delay=DELAY_SECONDS, max_discovery=DEFAULT_MAX_DISCOVERY,
-              blocklist_path="blocked_ids.json"):
+              blocklist_path="blocked_ids.json", depth=1):
     """Targeted refresh seeded from a single player ID.
 
     Skips full Phase 1; force-refreshes the seed and everyone in the seed's
     recent qualifying matches (so their ELOs are current); then BFS-walks
     those participants' histories to discover any new players. Cheap update
     after a session of games when only a handful of players' ratings moved.
+
+    `depth` controls how far the refresh reaches. depth=1 (default) only
+    refreshes seed + direct opponents; the BFS phase only fetches genuinely
+    new players. depth=2 also force-refreshes known players one hop further
+    (opponents-of-opponents); depth=3 keeps going. Each extra level costs
+    more API calls.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1354,9 +1385,13 @@ def run_quick(seed_id, players_path, output_dir, deep_search=False,
         print(f"[{i}/{len(participants)}] id={pid} {tag}")
         fetch_player(pid, rate, session, cache, force=True)
 
-    print(f"\n=== BFS discovery from seed's matches (cap: {max_discovery}) ===")
+    refresh_through = max(0, depth - 1)
+    refresh_note = (f", refresh known up to {refresh_through} hop(s) deeper"
+                    if refresh_through > 0 else "")
+    print(f"\n=== BFS from seed's matches (cap: {max_discovery}{refresh_note}) ===")
     bfs_new = discover_bfs(participants, cache, rate, session, max_discovery,
-                           deep_search, seen_matches=seen_matches, blocklist=blocklist)
+                           deep_search, seen_matches=seen_matches, blocklist=blocklist,
+                           refresh_known_through_depth=refresh_through)
 
     # Anything we touched that isn't already known and is eligible should be saved.
     new_ids = []
@@ -1395,6 +1430,10 @@ if __name__ == "__main__":
                         help="Quick refresh: skip Phase 1; force-refresh seed ID + everyone in their "
                              "recent qualifying matches; BFS-walk those histories for new players. "
                              "Use this after a play session when only a few ratings have moved.")
+    parser.add_argument("--quick-depth", type=int, default=1,
+                        help="With --quick, refresh known players within N hops of seed "
+                             "(default 1 = seed + direct opponents only; 2 = also "
+                             "opponents-of-opponents; etc.). Higher = more API calls.")
     parser.add_argument("--import-ids", metavar="FILE", default=None,
                         help="Parse a messy text file for numeric player IDs and merge them into "
                              "players.json. Skips non-numeric tokens, strips comma-thousands. "
@@ -1433,7 +1472,8 @@ if __name__ == "__main__":
                   deep_search=args.deep_search,
                   delay=args.delay,
                   max_discovery=args.max_discovery,
-                  blocklist_path=args.blocklist)
+                  blocklist_path=args.blocklist,
+                  depth=args.quick_depth)
     else:
         run(args.players, args.output,
             discover=not args.no_discover,
