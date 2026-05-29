@@ -811,6 +811,106 @@ def build_simple_html(players, last_updated=None):
     white-space: nowrap;
   }}
 
+  /* Rank distribution chart */
+  .rank-dist-toggle {{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    margin-bottom: 4px;
+    background: rgba(28, 48, 84, 0.4);
+    border: 1px solid rgba(79, 195, 247, 0.12);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Teko', sans-serif;
+    font-size: 1.05rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }}
+  .rank-dist-toggle:hover {{
+    background: rgba(28, 48, 84, 0.6);
+    border-color: rgba(79, 195, 247, 0.3);
+    color: var(--cyan);
+  }}
+  .rank-dist-arrow {{
+    color: var(--cyan);
+    font-size: 0.9rem;
+    transition: transform 0.25s ease;
+    display: inline-block;
+  }}
+  .rank-dist-toggle.open .rank-dist-arrow {{ transform: rotate(180deg); }}
+  .rank-dist-panel {{
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, margin-bottom 0.35s ease;
+    margin-bottom: 0;
+  }}
+  .rank-dist-panel.open {{
+    max-height: 280px;
+    margin-bottom: 20px;
+  }}
+  .rank-dist-chart {{
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    padding: 16px 14px 12px;
+    background: rgba(20, 34, 56, 0.45);
+    border: 1px solid rgba(79, 195, 247, 0.08);
+    border-radius: 8px;
+  }}
+  .rank-bar-col {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    transition: transform 0.15s;
+  }}
+  .rank-bar-col:hover {{ transform: translateY(-2px); }}
+  .rank-bar-count {{
+    font-family: 'Teko', sans-serif;
+    font-size: 0.95rem;
+    color: var(--muted);
+    transition: color 0.15s;
+    line-height: 1;
+  }}
+  .rank-bar-col:hover .rank-bar-count {{ color: var(--text); }}
+  .rank-bar-track {{
+    width: 100%;
+    height: 130px;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(255, 255, 255, 0.025);
+    border-radius: 3px;
+    overflow: hidden;
+  }}
+  .rank-bar {{
+    width: 100%;
+    min-height: 2px;
+    border-radius: 3px 3px 0 0;
+    box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.25);
+    transition: height 0.45s cubic-bezier(.4,1.6,.5,1), filter 0.15s;
+  }}
+  .rank-bar-col:hover .rank-bar {{ filter: brightness(1.25); }}
+  .rank-bar-icon {{
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    margin-top: 2px;
+    opacity: 0.85;
+    transition: opacity 0.15s;
+  }}
+  .rank-bar-col:hover .rank-bar-icon {{ opacity: 1; }}
+  @media (max-width: 600px) {{
+    .rank-bar-icon {{ width: 16px; height: 16px; }}
+    .rank-bar-count {{ font-size: 0.8rem; }}
+    .rank-bar-track {{ height: 100px; }}
+  }}
+
   /* Podium rows */
   .top-1 {{
     background: linear-gradient(90deg, rgba(197,155,42,0.22) 0%, rgba(197,155,42,0.10) 60%, rgba(28,48,84,0.45) 100%) !important;
@@ -859,6 +959,16 @@ def build_simple_html(players, last_updated=None):
     </label>
     <span class="last-updated"><span id="playerCount"></span> Players &nbsp;&bull;&nbsp; Last Updated: {last_updated}</span>
   </div>
+  <!-- Rank distribution chart (disabled — uncomment to re-enable, paired with JS block below)
+  <button class="rank-dist-toggle" id="rankDistToggle" aria-expanded="false">
+    <span class="rank-dist-arrow">&#9662;</span>
+    <span class="rank-dist-label">Show Rank Distribution</span>
+  </button>
+  <div class="rank-dist-panel" id="rankDistPanel">
+    <div class="rank-dist-chart" id="rankDistChart"></div>
+  </div>
+  -->
+
   <table id="lb">
     <tbody>
 {rows_html}
@@ -965,6 +1075,62 @@ function update() {{
   }}
   visible.filter(r => !placed.has(r)).forEach(r => placeRow(r, truePosMap.get(r), byPeak));
 }}
+
+/* Rank distribution chart (disabled — uncomment to re-enable, paired with HTML block above)
+const CHART_ORDER = [
+  'Unranked',
+  'Bronze I','Bronze II','Bronze III',
+  'Silver I','Silver II','Silver III',
+  'Gold I','Gold II','Gold III',
+  'Platinum I','Platinum II','Platinum III',
+  'Diamond','Legend'
+];
+
+function renderRankChart() {{
+  const byPeak = sortPeak.checked;
+  const noUnranked = hideUnranked.checked;
+  const counts = {{}};
+  allRows.forEach(r => {{
+    const rank = (byPeak ? r.dataset.highestRank : r.dataset.rank) || 'Unranked';
+    if (noUnranked && rank === 'Unranked') return;
+    counts[rank] = (counts[rank] || 0) + 1;
+  }});
+  const order = noUnranked ? CHART_ORDER.filter(r => r !== 'Unranked') : CHART_ORDER;
+  const maxCount = Math.max(1, ...order.map(r => counts[r] || 0));
+
+  document.getElementById('rankDistChart').innerHTML = order.map(rank => {{
+    const count = counts[rank] || 0;
+    const heightPct = (count / maxCount) * 100;
+    const color = RANK_COLOR[rank] || '#7a8da6';
+    const img = RANK_IMG[rank] || 'ranks/unranked.png';
+    const plural = count === 1 ? '' : 's';
+    return `<div class="rank-bar-col" title="${{rank}}: ${{count}} player${{plural}}">
+      <span class="rank-bar-count">${{count}}</span>
+      <div class="rank-bar-track">
+        <div class="rank-bar" style="height: ${{heightPct}}%; background: ${{color}};"></div>
+      </div>
+      <img class="rank-bar-icon" src="${{img}}" alt="${{rank}}">
+    </div>`;
+  }}).join('');
+}}
+
+const rankDistToggle = document.getElementById('rankDistToggle');
+const rankDistPanel  = document.getElementById('rankDistPanel');
+rankDistToggle.addEventListener('click', () => {{
+  const open = rankDistPanel.classList.toggle('open');
+  rankDistToggle.classList.toggle('open', open);
+  rankDistToggle.setAttribute('aria-expanded', open);
+  rankDistToggle.querySelector('.rank-dist-label').textContent =
+    open ? 'Hide Rank Distribution' : 'Show Rank Distribution';
+  if (open) renderRankChart();
+}});
+
+const _origUpdate = update;
+update = function() {{
+  _origUpdate();
+  if (rankDistPanel.classList.contains('open')) renderRankChart();
+}};
+*/
 
 search.addEventListener('input', update);
 hideUnranked.addEventListener('change', update);
